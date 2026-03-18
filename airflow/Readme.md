@@ -10,7 +10,6 @@ Make sure you have the following installed:
 
 * Docker
 
----
 
 ## Setup Instructions
 
@@ -20,15 +19,13 @@ Make sure you have the following installed:
 cd airflow
 ```
 
----
 
 ### 2. Start Airflow services
 
 ```bash
-docker-compose up -d
+docker-compose up airflow-init
 ```
 
----
 
 ### 3. Open Airflow UI
 
@@ -38,7 +35,6 @@ Go to:
 http://localhost:8080
 ```
 
----
 
 ### 4. Login Credentials
 
