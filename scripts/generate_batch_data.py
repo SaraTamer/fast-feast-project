@@ -5,8 +5,9 @@ import argparse
 import pandas as pd
 from datetime import datetime
 
-MASTER_DIR = "../data/master"
-BATCH_DIR = "../data/input/batch"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MASTER_DIR = os.path.join(BASE_DIR, "data", "master")
+BATCH_DIR = "/opt/airflow/data/input/batch"  
 
 
 def load_master_data():
@@ -114,12 +115,13 @@ def save_batch(run_date, batch):
     return out_dir
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Generate daily batch data")
-    parser.add_argument("--date", type=str, required=True, help="Date in YYYY-MM-DD format")
-    args = parser.parse_args()
-
-    run_date = args.date
+def main(run_date=None):
+    # If no date is passed (CLI), parse command-line args
+    if run_date is None:
+        parser = argparse.ArgumentParser(description="Generate daily batch data")
+        parser.add_argument("--date", type=str, required=True, help="Date in YYYY-MM-DD format")
+        args = parser.parse_args()
+        run_date = args.date
 
     # Validate date format
     try:
@@ -128,7 +130,7 @@ def main():
         print(f"Error: Invalid date format '{run_date}'. Use YYYY-MM-DD")
         return
 
-    # Set seed based on date for reproducibility
+    # Set seed for reproducibility
     random.seed(hash(run_date) & 0xFFFFFFFF)
 
     print("=" * 60)
@@ -151,19 +153,20 @@ def main():
 
     # Save batch data
     out_dir = save_batch(run_date, batch)
-
     print(f"\nBatch data exported to: {out_dir}/")
-    
+
+    # Print CSV summary
     print("\n[CSV FILES]")
     for table in ["customers", "drivers", "agents", "regions", "reasons",
                   "categories", "segments", "teams", "channels", "priorities", "reason_categories"]:
         print(f"  {table}.csv: {len(batch[table])} records")
 
+    # Print JSON summary
     print("\n[JSON FILES]")
     for table in ["restaurants", "cities"]:
         print(f"  {table}.json: {len(batch[table])} records")
 
-    # Show summary
+    # Print batch summary
     print("\n[SUMMARY]")
     print(f"  Total customers in batch: {len(batch['customers'])}")
     print(f"  Total drivers in batch: {len(batch['drivers'])}")
@@ -177,4 +180,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()  # No argument → will parse CLI args
