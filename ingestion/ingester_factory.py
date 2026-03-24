@@ -6,4 +6,4 @@ class FactoryIngester:
         pass
 
     def get_reader(self, file_path: str):
-        pass
+        print("We are Sara and Shahd, we got the file to be ready for ingestion!!")

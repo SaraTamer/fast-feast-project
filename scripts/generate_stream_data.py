@@ -6,9 +6,9 @@ import argparse
 import pandas as pd
 from datetime import datetime, timedelta
 
-MASTER_DIR = "../data/master"
-BATCH_DIR = "../data/input/batch"
-STREAM_DIR = "../data/input/stream"
+MASTER_DIR = "data/master"
+BATCH_DIR = "data/input/batch"
+STREAM_DIR = "data/input/stream"
 
 # SLA Config
 SLA_FIRST_RESPONSE_MIN = 1

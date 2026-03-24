@@ -1,0 +1,24 @@
+paths:
+  master_data: "data/master/"
+  batch_input: "data/input/batch/"
+  stream_input: "data/input/stream/"
+  
+  quarantine_dir: "data/quarantine/"
+  temp_orphans_dir: "data/temp_orphans/"
+  
+  log_file: "logs/pipeline.log"
+  error_log_file: "logs/errors.log"
+
+  # gold_layer_output: ""
+
+rules:
+  sla_first_response_minutes: 1
+  sla_resolution_minutes: 15
+  orphan_check_delay_minutes: 10
+  
+  supported_formats: ["csv", "json"]
+
+smtp:
+  server: ""
+  port: 
+  sender_email: ""
