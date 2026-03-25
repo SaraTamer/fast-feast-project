@@ -1,8 +1,24 @@
 from .base_ingester import Ingester
-
+import core.logger as logger
+import json
+import pandas as pd
 class JSONIngest(Ingester):
-    def __init__(self, file_name: str):
-        pass
+    def __init__(self, file_path: str):
+        self.file_path = file_path
 
     def ingest(self):
-        pass
+        logger = logger.AuditLogger()
+        logger.log_msg(f"ingesting data from {self.file_path}...")
+        try:
+            with open(self.file_path,'r') as f:
+                data=json.load(f)
+            if not data:
+                logger.log_err(f"{self.file_path} is empty")
+            else:
+                logger.log_msg("Data ingested successfully!")
+            data=pd.json_normalize(data)
+            return data
+        except Exception as e:
+            logger.log_err(f"An error occurred while ingesting data: {e}")
+
+

@@ -1,9 +1,16 @@
 from .csv_ingest import CSVIngest
 from .json_ingest import JSONIngest
+import os
 
 class FactoryIngester:
-    def __init__(self, file_type: str):
-        pass
+     def __init__(self, file_type: str):
+        self.file_type = file_type
 
-    def get_reader(self, file_path: str):
-        print("We are Sara and Shahd, we got the file to be ready for ingestion!!")
+     def get_ingester(self, file_path: str):
+        logger = logger.AuditLogger()
+        if self.file_type==".csv":
+            return CSVIngest(file_path)
+        elif self.file_type==".json":
+            return JSONIngest(file_path)
+        else:
+            logger.log_err(f"Unsupported file type: {self.file_type}")

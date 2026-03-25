@@ -16,3 +16,7 @@ class Config:
         
     def master_data_path(self):
         return self.settings['paths']['master_data']
+    def log_file_path(self):
+        return self.settings['paths']['log_file']
+    def err_file_path(self):
+        return self.settings['paths']['err_file']
