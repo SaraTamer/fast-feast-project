@@ -1,0 +1,8 @@
+airflow/dags/__pycache__/
+*.pyc
+.env
+airflow/plugins/__pycache__/
+data/
+airflow/config
+airflow/logs/*
+!airflow/logs/.gitkeep
