@@ -8,7 +8,14 @@ from ingestion.ingester_factory import FactoryIngester
 def test_pipeline_trigger(file_path):
 
     file_type = file_path.split('.')[-1] 
-    df = FactoryIngester(file_type).get_reader(file_path)
+    ingester = FactoryIngester(file_type).get_reader(file_path)
+    try: 
+        if ingester:
+            df=ingester.ingest()
+            if df is not None:
+                print(df.head())
+    except Exception as e:
+        print(f"An error occurred while processing the file: {e}")
     
 class Main:
     def __init__(self):

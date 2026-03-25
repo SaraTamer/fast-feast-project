@@ -2,6 +2,7 @@ import logging
 import os 
 import sys
 from config.config_loader import Config
+from logging.handlers import RotatingFileHandler
 class AuditLogger:
     def __init__(self):
         config_path="config/config.yaml"
@@ -20,11 +21,11 @@ class AuditLogger:
             formatter = logging.Formatter(
                 "%(asctime)s | %(levelname)s |%(threadName)s | %(name)s | %(message)s"
             )
-            file_handler=logging.FileHandler(log_file)
+            file_handler=RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=5)
             file_handler.setLevel(logging.INFO)
             file_handler.setFormatter(formatter)
 
-            error_handler=logging.FileHandler(err_file)
+            error_handler=RotatingFileHandler(err_file, maxBytes=5*1024*1024, backupCount=5)
             error_handler.setLevel(logging.ERROR)
             error_handler.setFormatter(formatter)
 

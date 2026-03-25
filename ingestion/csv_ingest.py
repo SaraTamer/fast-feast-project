@@ -1,19 +1,20 @@
 from .base_ingester import Ingester
 import pandas as pd
+import core.logger as logger
 
 class CSVIngest(Ingester):
     def __init__(self, file_path: str):
         self.file_path = file_path
 
     def ingest(self):
-        logger= logger.AuditLogger()
-        logger.log_msg(f"Ingesting data from {self.file_path}...")
+        audit_logger= logger.AuditLogger()
+        audit_logger.log_msg(f"Ingesting data from {self.file_path}...")
         try:
             data = pd.read_csv(self.file_path)
             if data.empty:
-                logger.log_err(f"{self.file_path} is empty")
+                audit_logger.log_err(f"{self.file_path} is empty")
             else:
-                logger.log_msg("Data ingested successfully!")
+                audit_logger.log_msg("Data ingested successfully!")
             return data
         except Exception as e:
-            logger.log_err(f"An error occurred while ingesting data: {e}")
+            audit_logger.log_err(f"An error occurred while ingesting data: {e}")

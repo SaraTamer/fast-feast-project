@@ -19,4 +19,4 @@ class Config:
     def log_file_path(self):
         return self.settings['paths']['log_file']
     def err_file_path(self):
-        return self.settings['paths']['err_file']
+        return self.settings['paths']['error_log_file']
