@@ -1,2 +1,5 @@
 watchdog
 pyyaml
+pandas
+numpy
+duckdb
