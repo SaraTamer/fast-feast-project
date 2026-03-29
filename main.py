@@ -15,7 +15,13 @@ def pipeline_trigger(file_path):
             if df is not None:
                 print(df.head())
     except Exception as e:
-        print(f"An error occurred while processing the file: {e}")
+        print(f"An error occurred while ingesting the file: {e}")
+
+    
+
+
+
+
 class Main:
     def __init__(self):
         self.app_config = Config()
@@ -23,7 +29,7 @@ class Main:
         # get the paths from config.yaml  using config_loader.py
         stream_path = self.app_config.stream_input_path()
         batch_path = self.app_config.batch_input_path()
-        scheme_path = self.app_config.scheme_path()
+        scheme_path = self.app_config.schema_path()
 
         # create the watchers
         self.stream_watch = StreamWatcher(stream_path, pipeline_trigger)
