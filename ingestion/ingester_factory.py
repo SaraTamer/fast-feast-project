@@ -4,14 +4,20 @@ import os
 import core.logger as logger
 
 class FactoryIngester:
-     def __init__(self, file_type: str):
-        self.file_type = file_type
+    READERS = {
+        "csv": CSVIngest,
+        "json": JSONIngest
+    }
 
-     def get_reader(self, file_path: str):
-        audit_logger = logger.AuditLogger()
-        if self.file_type=="csv":
-            return CSVIngest(file_path)
-        elif self.file_type=="json":
-            return JSONIngest(file_path)
-        else:
-            audit_logger.log_err(f"Unsupported file type: {self.file_type}")
+    def __init__(self, file_type: str):
+        self.file_type = file_type.lower()
+        self.audit_logger = logger.AuditLogger()
+
+    def get_reader(self, file_path: str):
+        if self.file_type not in self.READERS:
+            self.audit_logger.log_err(f"Unsupported file type: {self.file_type}")
+            return None
+        if not os.path.exists(file_path):
+            self.audit_logger.log_err(f"File not found: {file_path}")
+            return None
+        return self.READERS[self.file_type](file_path)

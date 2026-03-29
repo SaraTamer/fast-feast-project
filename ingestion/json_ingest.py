@@ -13,12 +13,12 @@ class JSONIngest(Ingester):
             with open(self.file_path,'r') as f:
                 data=json.load(f)
             if not data:
-                audit_logger.log_err(f"{self.file_path} is empty")
+                audit_logger.log_warning(f"{self.file_path} is empty")
             else:
                 audit_logger.log_msg("Data ingested successfully!")
             data=pd.json_normalize(data)
             return data
         except Exception as e:
             audit_logger.log_err(f"An error occurred while ingesting data: {e}")
-
+            raise RuntimeError(f"Ingestion failed: {e}")
 
