@@ -7,3 +7,4 @@ airflow/config
 airflow/logs/*
 !airflow/logs/.gitkeep
 logs
+**/__pycache__/
