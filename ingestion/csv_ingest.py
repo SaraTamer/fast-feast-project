@@ -1,5 +1,5 @@
 from .base_ingester import Ingester
-import pandas as pd
+import duckdb as dd
 import core.logger as logger
 
 class CSVIngest(Ingester):
@@ -10,8 +10,8 @@ class CSVIngest(Ingester):
         audit_logger= logger.AuditLogger()
         audit_logger.log_msg(f"Ingesting data from {self.file_path}...")
         try:
-            data = pd.read_csv(self.file_path)
-            if data.empty:
+            data = dd.read_csv(self.file_path)
+            if self.empty(data):
                 audit_logger.log_warning(f"{self.file_path} is empty")
             else:
                 audit_logger.log_msg("Data ingested successfully!")

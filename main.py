@@ -2,6 +2,7 @@ import threading
 from watchers.stream_watcher import StreamWatcher
 from watchers.batch_watcher import BatchWatcher
 from config.config_loader import Config
+import duckdb as dd
 from ingestion.ingester_factory import FactoryIngester
 
 
@@ -13,9 +14,11 @@ def test_pipeline_trigger(file_path):
         if ingester:
             df=ingester.ingest()
             if df is not None:
-                print(df.head())
+                print(f"Data from {file_path} ingested successfully. Here's a preview:")
+                print(dd.sql("SELECT * FROM df LIMIT 5"))
     except Exception as e:
         print(f"An error occurred while processing the file: {e}")
+    
     
 class Main:
     def __init__(self):
