@@ -21,4 +21,4 @@ class Config:
         return self.settings['paths']['error_log_file']
     
     def schemas_path(self):
-        return self.settings['paths']['schemas_path']
+        return self.settings['paths']['scheme_path']
