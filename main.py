@@ -1,4 +1,5 @@
 import threading
+import time
 from watchers.stream_watcher import StreamWatcher
 from watchers.batch_watcher import BatchWatcher
 from config.config_loader import Config
@@ -29,7 +30,7 @@ class Main:
         # get the paths from config.yaml  using config_loader.py
         stream_path = self.app_config.stream_input_path()
         batch_path = self.app_config.batch_input_path()
-        scheme_path = self.app_config.schema_path()
+        schema_path = self.app_config.schema_path()
 
         # create the watchers
         self.stream_watch = StreamWatcher(stream_path, pipeline_trigger)
@@ -45,6 +46,26 @@ class Main:
         # start them at the same time
         t1.start()
         t2.start()
+
+        try:
+            while True:
+                time.sleep(1)   # keep main thread alive
+                print("main_thread")
+        except KeyboardInterrupt:
+            print("\nCtrl+C caught — shutting down...")
+
+            # Stop watchers properly
+            self.stream_watch.stop()
+            self.batch_watch.stop()
+
+            # Wait for threads to exit
+            t1.join()
+            t2.join()
+
+
+            print("Shutdown complete.")
+
+
 
 if __name__ == "__main__":
     app = Main()
