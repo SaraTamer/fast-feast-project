@@ -1,45 +1,38 @@
 import duckdb
-import yaml
-import os
-from db.metadata_db import MetadataDB
 import core.logger as logger
+from config.schema_loader import SchemaLoader
+from processing.validators.filename_validator import FilenameValidator
+from processing.validators.columns_validator import ColumnsValidator
+from processing.validators.datatype_validator import DataTypeValidator
 
-audit_logger = logger.AuditLogger()
 class SchemaValidator:
-    def __init__(self, schemas_path: str):
-        self.db = MetadataDB()
-        self.conn = self.db.conn
-
-    def prepare_validation(self):
-        pass
-
-    def validate_filename(self, file_path: str):
-        base_name = os.path.basename(file_path)
-        table_name = base_name.split('.')[0].lower()
-        if table_name not in self.db.get_file_names():
-            audit_logger.log_err(f"Failed Validation {file_path}...")
-            return False
-        audit_logger.log_msg(f"Successfully Validate {file_path}...")
-        return table_name
-
-    def validate_schema(self, file_path: str, df: pd.DataFrame):
-        table_name = self.validate_filename(file_path)
+    def __init__(self, schema_loader: SchemaLoader):
+        self.audit_logger = logger.AuditLogger()
+        self.loader = schema_loader
         
+        # Workers
+        self.filename_validator = FilenameValidator(schema_loader)
+        self.columns_validator = ColumnsValidator(schema_loader)
+        self.datatype_validator = DataTypeValidator(schema_loader)
+
+    def validate_schema(self, file_path: str, relation: duckdb.DuckDBPyRelation):
+
+        # Filename validation
+        table_name = self.filename_validator.validate(file_path)
         if not table_name:
-            return None, df 
-        if not self.validate_required_col(df, table_name):
-            audit_logger.log_err(f"CRITICAL: {table_name} schema validation failed (Missing Columns). File dropped.")
-            return None, df 
-        valid_df, invalid_df = self.validate_dataTypes(df, table_name)
-        
-        if not invalid_df.empty:
-            audit_logger.log_err(f"SCHEMA WARNING: {len(invalid_df)} rows in {table_name} failed type validation and were quarantined.")
-        
-        audit_logger.log_msg(f"SUCCESS: {table_name} schema validation complete. {len(valid_df)} rows passed.")
-        return valid_df, invalid_df
+            self.audit_logger.log_err(f"Pipeline Halted: [{file_path}] failed filename validation.")
+            return False, relation
 
-    def validate_required_col(self, df):
-        pass
+        # Missing Columns
+        if not self.columns_validator.validate(relation, table_name):
+            self.audit_logger.log_err(f"Pipeline Halted: [{table_name}] failed column checks.")
+            return False, relation 
 
-    def validate_dataTypes(self, df):
-        pass
+        # Data Types
+        if not self.datatype_validator.validate(relation, table_name):
+            self.audit_logger.log_err(f"Pipeline Halted: [{table_name}] data types mismatch.")
+            return False, relation
+        
+        # If it survives all 3 workers
+        self.audit_logger.log_msg(f"ALL CHECKS PASSED: {table_name} data is pure and ready!")
+        return relation, False
