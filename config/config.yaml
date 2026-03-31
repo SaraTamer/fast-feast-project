@@ -9,7 +9,7 @@ paths:
   log_file: "logs/pipeline.log"
   error_log_file: "logs/errors.log"
 
-  scheme_path: "Config/schemas.yaml"
+  schema_path: "Config/schemas.yaml"
 
   # gold_layer_output: ""
 
