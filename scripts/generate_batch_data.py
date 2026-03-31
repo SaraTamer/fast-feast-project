@@ -5,9 +5,8 @@ import argparse
 import pandas as pd
 from datetime import datetime
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MASTER_DIR = os.path.join(BASE_DIR, "data", "master")
-BATCH_DIR = "/opt/airflow/data/input/batch"  
+MASTER_DIR = "data/master"
+BATCH_DIR = "data/input/batch"
 
 
 def load_master_data():

@@ -1,0 +1,7 @@
+watchdog
+pyyaml
+pandas
+numpy
+duckdb
+python-dotenv
+snowflake-connector-python[pandas] # put that between '' when pip install
