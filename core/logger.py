@@ -5,7 +5,6 @@ from config.config_loader import Config
 from logging.handlers import RotatingFileHandler
 class AuditLogger:
     def __init__(self):
-        config_path="config/config.yaml"
         cfg=Config()
         log_file=cfg.log_file_path()
         err_file=cfg.err_file_path()
@@ -41,3 +40,5 @@ class AuditLogger:
 
     def log_err(self, msg: str):
         self.logger.error(msg)
+    def log_warning(self, msg: str):
+        self.logger.warning(msg)
