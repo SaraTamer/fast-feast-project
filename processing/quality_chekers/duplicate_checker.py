@@ -1,0 +1,1 @@
+# reminder: use duckdb in proccessing
