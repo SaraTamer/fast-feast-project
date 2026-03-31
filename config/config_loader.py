@@ -10,13 +10,15 @@ class Config:
 
     def stream_input_path(self):
         return self.settings['paths']['stream_input']
-        
     def batch_input_path(self):
         return self.settings['paths']['batch_input']
-        
     def master_data_path(self):
         return self.settings['paths']['master_data']
+    
     def log_file_path(self):
         return self.settings['paths']['log_file']
     def err_file_path(self):
         return self.settings['paths']['error_log_file']
+    
+    def schemas_path(self):
+        return self.settings['paths']['scheme_path']

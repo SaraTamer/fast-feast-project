@@ -1,20 +1,23 @@
-class MetadataDB:
-    _instance = None
+from db.connections import DuckDBConnection
 
-    def __new__(cls, *args, **kwargs):
-        pass
-
+class MetadataTracker:
     def __init__(self):
-        pass
+        self.conn = DuckDBConnection().conn 
 
-    def get_filenames(self):
-        pass
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS processed_files (
+                filename VARCHAR PRIMARY KEY,
+                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    def get_required_cols(self, table_name: str):
-        pass
+    def is_file_processed(self, filename: str):
+        result = self.conn.execute(
+            "SELECT 1 FROM processed_files WHERE filename = ?", (filename,)
+        ).fetchone()
+        return result is not None
 
-    def get_cols_name(self, table_name: str):
-        pass
-
-    def get_dataTypes(self, table_name: str):
-        pass
+    def log_file_processed(self, filename: str):
+        self.conn.execute(
+            "INSERT OR IGNORE INTO processed_files (filename) VALUES (?)", (filename,)
+        )
