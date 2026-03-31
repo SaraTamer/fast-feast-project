@@ -88,6 +88,66 @@ tables:
       is_active: "boolean"
     primary_key: "agent_id"
 
+
+  teams:
+    file_type: "csv"
+    required_columns:
+      - "team_id"
+      - "team_name"
+    types:
+      team_id: "int"
+      team_name: "string"
+    primary_key: "team_id"
+
+  channels:
+    file_type: "csv"
+    required_columns:
+      - "channel_id"
+      - "channel_name"
+    types:
+      channel_id: "int"
+      channel_name: "string"
+    primary_key: "channel_id"
+
+  priorities:
+    file_type: "csv"
+    required_columns:
+      - "priority_id"
+      - "priority_code"
+      - "priority_name"
+      - "sla_first_response_min"
+      - "sla_resolution_min"
+    types:
+      priority_id: "int"
+      priority_code: "string"
+      priority_name: "string"
+      sla_first_response_min: "int"
+      sla_resolution_min: "int"
+    primary_key: "priority_id"
+
+  reason_categories:
+    file_type: "csv"
+    required_columns:
+      - "reason_category_id"
+      - "category_name"
+    types:
+      reason_category_id: "int"
+      category_name: "string"
+    primary_key: "reason_category_id"
+
+  cities:
+    file_type: "json"
+    required_columns:
+      - "city_id"
+      - "city_name"
+      - "country"
+      - "timezone"
+    types:
+      city_id: "int"
+      city_name: "string"
+      country: "string"
+      timezone: "string"
+    primary_key: "city_id"
   # Stream data
   orders:
     file_type: "json"
