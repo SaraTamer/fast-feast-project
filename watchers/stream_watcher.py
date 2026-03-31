@@ -17,10 +17,7 @@ class StreamWatcher(FileWatcher):
         self.observer.start()
         
         while self._running:
-                time.sleep(1)
-                print("stream_thread")
-
-            
+                time.sleep(1)  
         self.observer.join()
 
     def stop(self):
