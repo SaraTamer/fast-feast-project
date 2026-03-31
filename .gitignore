@@ -6,3 +6,7 @@ data/
 airflow/config
 airflow/logs/*
 !airflow/logs/.gitkeep
+*.log
+*.csv
+*.json
+**/__pycache__/
