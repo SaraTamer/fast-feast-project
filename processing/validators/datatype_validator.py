@@ -9,7 +9,7 @@ class DataTypeValidator(BaseValidator):
         self.audit_logger = logger.AuditLogger()
 
     def validate(self, relation: duckdb.DuckDBPyRelation, table_name: str) -> bool:
-        # Cross-checks DuckDB's native data type inference against schemas.yaml definitions.
+        # Cross-checks DuckDB's native data type inference against schema.yaml definitions.
         expected_types = self.loader.get_data_types(table_name)
         
         actual_types = relation.dtypes
