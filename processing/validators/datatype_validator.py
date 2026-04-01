@@ -24,11 +24,11 @@ class DataTypeValidator(BaseValidator):
                 
                 # Check mapping rules
                 if target_type == "int" and "INT" not in actual_type_str:
-                    self.audit_logger.log_err(f"TYPE MISMATCH: {table_name}.{col_name} is {actual_type_str}, expected INT.")
+                    self.audit_logger.log_err(f"Something Wrong: {table_name}.{col_name} is {actual_type_str}, expected INT.")
                     return False
                     
                 if target_type == "float" and "DOUBLE" not in actual_type_str and "FLOAT" not in actual_type_str:
-                    self.audit_logger.log_err(f"TYPE MISMATCH: {table_name}.{col_name} is {actual_type_str}, expected FLOAT.")
+                    self.audit_logger.log_err(f"Something Wrong: {table_name}.{col_name} is {actual_type_str}, expected FLOAT.")
                     return False
                     
         self.audit_logger.log_msg(f"SUCCESS: '{table_name}' passed Data Type Validation.")

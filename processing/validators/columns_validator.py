@@ -15,7 +15,7 @@ class ColumnsValidator(BaseValidator):
 
         for col in required_cols:
             if col not in current_cols:
-                self.audit_logger.log_err(f"CRITICAL: '{table_name}' is missing required field: '{col}'. Dropping file.")
+                self.audit_logger.log_err(f"Something Wrong: '{table_name}' is missing required field: '{col}'. Dropping file.")
                 return False
                 
         self.audit_logger.log_msg(f"SUCCESS: '{table_name}' passed Columns Validation.")
