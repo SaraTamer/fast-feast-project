@@ -1,24 +1,25 @@
 import sys
 import os
 
-# This line ensures Python can find the `db` folder from inside the `scripts` folder
+# This line ensures Python can find the `db` folder
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from db.connections import DatabaseManager
+from db.connections import DuckDBConnection, SnowflakeConnection
 
 def test_connection():
     try:
-        print("\n[TEST] Waking up Database Manager...")
-        db = DatabaseManager()
+        print("\n[TEST] Waking up Database Managers...")
         
         # Test 1: DuckDB (Local)
         print("[TEST 1] Testing DuckDB Local Connection...")
-        db.duck.execute("CREATE TABLE test_duck (id INT)")
-        print("         ✅ DuckDB is running perfectly in memory!")
+        duck_db = DuckDBConnection()
+        duck_db.conn.execute("CREATE TABLE IF NOT EXISTS test_duck (id INT)")
+        print("         ✅ DuckDB is running perfectly with its local file!")
         
         # Test 2: Snowflake (Cloud)
         print("\n[TEST 2] Testing Snowflake Cloud Connection... (This may take 2 seconds)")
-        cursor = db.snow.cursor()
+        snow_db = SnowflakeConnection()
+        cursor = snow_db.conn.cursor()
         
         # We ask Snowflake for its version, your role, and the warehouse it used!
         cursor.execute("SELECT current_version(), current_role(), current_warehouse()")
