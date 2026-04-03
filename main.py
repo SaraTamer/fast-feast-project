@@ -1,4 +1,4 @@
-import os
+import time
 import threading
 from watchers.stream_watcher import StreamWatcher
 from watchers.batch_watcher import BatchWatcher
@@ -57,6 +57,22 @@ class Main:
         # start them at the same time
         t1.start()
         t2.start()
+
+        try:
+            while True:
+                time.sleep(1)  # keep main thread alive
+        except KeyboardInterrupt:
+            print("\nCtrl+C caught — shutting down...")
+
+            # Stop watchers properly
+            self.stream_watch.stop()
+            self.batch_watch.stop()
+
+            # Wait for threads to exit
+            t1.join()
+            t2.join()
+
+            print("Shutdown complete.")
 
 
 if __name__ == "__main__":
