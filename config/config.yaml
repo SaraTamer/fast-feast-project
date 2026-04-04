@@ -16,9 +16,14 @@ paths:
 rules:
   sla_first_response_minutes: 1
   sla_resolution_minutes: 15
-  orphan_check_delay_minutes: 10
-  
+  orphan_check_delay_seconds: 600
+  max_retries: 5
   supported_formats: ["csv", "json"]
+
+
+snowflake_tables:
+errors_table: "streaming_pipeline_errors"
+
 
 smtp:
   server: ""

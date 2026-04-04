@@ -2,7 +2,7 @@ tables:
   # Batch data
   customers:
     file_type: "csv"
-    required_columns: 
+    required_columns:
       - "customer_id"
       - "full_name"
       - "email"
@@ -112,7 +112,13 @@ tables:
       order_status: "string"
       order_created_at: "timestamp"
     primary_key: "order_id"
-
+    foreign_keys:
+      - column: "customer_id"
+        references: "customers.customer_id"
+      - column: "restaurant_id"
+        references: "restaurants.restaurant_id"
+      - column: "driver_id"
+        references: "drivers.driver_id"
   tickets:
     file_type: "csv"
     required_columns:
@@ -134,7 +140,13 @@ tables:
       status: "string"
       created_at: "timestamp"
     primary_key: "ticket_id"
-
+    foreign_keys:
+      - column: "order_id"
+        references: "orders.order_id"
+      - column: "customer_id"
+        references: "customers.customer_id"
+      - column: "agent_id"
+        references: "agents.agent_id"
   ticket_events:
     file_type: "json"
     required_columns:
@@ -150,3 +162,8 @@ tables:
       new_status: "string"
       event_ts: "timestamp"
     primary_key: "event_id"
+    foreign_keys:
+      - column: "ticket_id"
+        references: "tickets.ticket_id"
+      - column: "agent_id"
+        references: "agents.agent_id"

@@ -108,7 +108,7 @@ class QualityCheck:
     def check_orphans(self, df):
         pass
 
-    def check_data_formats(self, df):
+    def check_date_formats(self, df):
         pass
 
 # ---------- Helper methods ----------

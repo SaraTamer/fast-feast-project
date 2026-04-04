@@ -22,3 +22,7 @@ class Config:
     
     def schemas_path(self):
         return self.settings['paths']['scheme_path']
+    def orphans_wait_time(self):
+        return self.settings['rules']['orphan_check_delay_seconds']
+    def get_errors_table_name(self):
+        return self.settings['snowflake_tables']['errors_table']
