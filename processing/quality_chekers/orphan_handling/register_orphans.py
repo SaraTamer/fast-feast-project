@@ -8,7 +8,7 @@ from db.connections import DatabaseManager
 from config.config_loader import Config
 
 
-class RetryRegistrar:
+class OrphansRegistrar:
 
     def __init__(self, stage="@%reconciliation_table"):
         self.db = DatabaseManager()
