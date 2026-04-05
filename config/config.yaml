@@ -10,6 +10,7 @@ paths:
   error_log_file: "logs/errors.log"
 
   schema_path: "Config/schema.yaml"
+  required_cols_path: "Config/required_cols.yaml"
 
   # gold_layer_output: ""
 

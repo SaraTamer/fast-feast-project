@@ -19,7 +19,9 @@ class Config:
         return self.settings['paths']['log_file']
     def err_file_path(self):
         return self.settings['paths']['error_log_file']
-    
+    def req_cols_path(self):
+        return self.settings['paths']['required_cols_path']
+
     def schemas_path(self):
         return self.settings['paths']['scheme_path']
     def orphans_wait_time(self):
