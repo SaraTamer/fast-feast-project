@@ -7,6 +7,7 @@ class BatchWatcher(FileWatcher):
         self.directory = directory
         self.ingestion_callback = ingestion_callback
         self.observer = Observer()
+        self._running = True
 
     def watch_dog(self):
         # we pass the prefix "BATCH"
@@ -15,10 +16,11 @@ class BatchWatcher(FileWatcher):
         self.observer.schedule(event_handler, self.directory, recursive=True)
         self.observer.start()
         
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            self.observer.stop()
-            
+        while self._running:
+                time.sleep(1)            
         self.observer.join()
+
+    def stop(self):
+        self._running = False
+        self.observer.stop()
+
