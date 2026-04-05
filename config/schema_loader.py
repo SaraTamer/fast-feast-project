@@ -1,15 +1,9 @@
 import yaml
 
-
 class SchemaLoader:
     def __init__(self, schemas_path: str):
         with open(schemas_path, 'r') as file:
             self.schemas = yaml.safe_load(file)['tables']
-
-    @property
-    def tables(self):
-        """Property to access tables (alias for schemas for compatibility)."""
-        return self.schemas
 
     def get_table_names(self):
         return list(self.schemas.keys())
@@ -21,39 +15,4 @@ class SchemaLoader:
         return self.schemas.get(table_name, {}).get('types', {})
 
     def get_primary_key(self, table_name: str):
-        # Fix: Handle both 'primary_key' and 'primary_keys' in schema
-        pk = self.schemas.get(table_name, {}).get('primary_key')
-        if pk is None:
-            pk = self.schemas.get(table_name, {}).get('primary_keys', [])
-            if isinstance(pk, list) and len(pk) > 0:
-                pk = pk[0]  # Return first primary key if list
-        return pk
-
-    def get_primary_keys(self, table_name: str):
-        """Return primary keys as list (for composite keys)."""
-        pk = self.schemas.get(table_name, {}).get('primary_keys')
-        if pk is None:
-            pk = self.schemas.get(table_name, {}).get('primary_key', [])
-            if isinstance(pk, str):
-                pk = [pk]
-        return pk if isinstance(pk, list) else [pk] if pk else []
-
-    def get_columns_meta(self, table_name):
-        table = self.schemas.get(table_name, {})
-        formats = table.get("formats") or {}
-
-        return [
-            {
-                "column": col,
-                "format": fmt
-            }
-            for col, fmt in formats.items()
-        ]
-
-    def get_foreign_keys(self, table_name: str):
-        """Get foreign keys for a table."""
-        return self.schemas.get(table_name, {}).get('foreign_keys', [])
-
-    def table_exists(self, table_name: str) -> bool:
-        """Check if table exists in schema."""
-        return table_name in self.schemas
+        return self.schemas.get(table_name, {}).get('primary_key', {})
