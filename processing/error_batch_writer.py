@@ -1,8 +1,8 @@
 import uuid
 import csv
 from datetime import datetime
-from core.logger import Logger
-from db.connections import DatabaseManager
+from core.logger import AuditLogger
+from db.connections import DuckDBConnection, SnowflakeConnection
 import os
 
   
@@ -10,9 +10,9 @@ import os
 class ErrorBatchWriter:
   
     def __init__(self,stage="@%streaming_pipeline_errors_stage"):
-        self.db = DatabaseManager()
-        self.logger = Logger()
-        self.snow = self.db.get_snowflake()
+        self.duckdb = DuckDBConnection()
+        self.logger = AuditLogger()
+        self.snowflake = SnowflakeConnection()
         self.stage = stage
         
     def write_batch(

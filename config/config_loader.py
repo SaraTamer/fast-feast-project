@@ -23,7 +23,7 @@ class Config:
         return self.settings['paths']['required_cols_path']
 
     def schemas_path(self):
-        return self.settings['paths']['scheme_path']
+        return self.settings['paths']['schema_path']
     def orphans_wait_time(self):
         return self.settings['rules']['orphan_check_delay_seconds']
     def get_errors_table_name(self):

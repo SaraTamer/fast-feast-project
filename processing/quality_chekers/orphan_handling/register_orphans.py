@@ -3,19 +3,19 @@ import uuid
 import csv
 from datetime import datetime
 
-from core.logger import Logger
-from db.connections import DatabaseManager
+from core.logger import AuditLogger
+from db.connections import DuckDBConnection,SnowflakeConnection
 from config.config_loader import Config
 
 
 class OrphansRegistrar:
 
     def __init__(self, stage="@%reconciliation_table"):
-        self.db = DatabaseManager()
-        self.logger = Logger()
+        self.duckdb = DuckDBConnection()
+        self.logger = AuditLogger()
         self.config = Config()
 
-        self.snow = self.db.get_snowflake()
+        self.snow = SnowflakeConnection()
         self.stage = stage
 
         self.max_retries = self.config.load_the_yaml()['rules']['max_retries']

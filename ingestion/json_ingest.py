@@ -9,7 +9,7 @@ class JSONIngest(Ingester):
     def ingest(self):
         self.audit_logger.log_msg(f"ingesting data from {self.file_path}...")
         try:
-            data = dd.read_json(self.file_path, ignore_errors=True)
+            data = dd.read_json(self.file_path)
             if self.empty(data):
                 self.audit_logger.log_warning(f"{self.file_path} is empty")
             else:
