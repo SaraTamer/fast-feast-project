@@ -27,7 +27,7 @@ class OrphanChecker:
         for fk in forign_keys:
             fk_column=fk["column"]
             ref=fk["references"]
-            dim_name, dim_column=ref.split("f")
+            dim_name, dim_column=ref.split(".")
             dim_df=dim_tables.get(dim_name)
 
             if not dim_df:
@@ -50,4 +50,4 @@ class OrphanChecker:
         sleep(self.config.orphans_wait_time)
         self.writer.write_batch(table_name,batch_id,'Orphans',fk_column,dim_name,True)
         self.logger.log_msg(f"Orphan_detector sent a batch to {self.get_errors_table_name} to be written in snowflake")
-        self.register_batch(table_name,primary_key,orphans)
+        self.register_orphans(table_name,primary_key,orphans)
