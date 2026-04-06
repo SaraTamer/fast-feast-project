@@ -44,3 +44,14 @@ class DataTypeValidator(BaseValidator):
         clean_relation, bad_rows_df = self.separator.separate(
             relation, mismatched
         )
+
+        # ── Step 3: Quarantine bad rows ──
+        if bad_rows_df is not None and len(bad_rows_df) > 0:
+            self.quarantine.quarantine(
+                bad_rows_df=bad_rows_df,
+                table_name=table_name,
+                primary_key=primary_key,
+                batch_id=batch_id,
+                error_type="TYPE_MISMATCH",
+                retryable=False,
+            )
