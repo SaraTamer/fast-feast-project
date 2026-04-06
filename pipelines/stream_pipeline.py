@@ -2,6 +2,7 @@ import uuid
 
 from core.logger import AuditLogger
 from ingestion.ingester_factory import FactoryIngester
+from processing.monitoring.metrics_tracker import MetricsTracker
 from processing.quality_chekers.null_checker import NullChecker
 from processing.quality_chekers.orphan_handling.orphan_detector import OrphanChecker
 
@@ -13,8 +14,9 @@ class StreamPipeline:
         self.logger = AuditLogger()
         self.validator = validator
         self.dim_cache = dim_cache
+        self.metrics_tracker = MetricsTracker()
         self.orphan_checker = OrphanChecker()
-        self.null_checker = NullChecker()
+        self.null_checker = NullChecker(self.metrics_tracker)
         self.metadata_tracker = metadata_tracker
 
     def process_event(self, file_path):
@@ -32,18 +34,18 @@ class StreamPipeline:
                         print(valid_relation.limit(5))
 
                         null_check_result = self.null_checker.check_null_values(
-                            df=valid_relation,
+                            relation=valid_relation,
                             file_path=file_path,
                             table_name=table_name,
                             batch_id=batch_id,
                         )
-                        clean_df = null_check_result['clean_df']
+                        clean_relation = null_check_result['clean_relation']
                         if null_check_result['metrics']['clean_records_count'] == 0:
                             self.logger.log_warning(f"No clean records for {table_name}. Skipping further processing.")
 
                         self.orphan_checker.detect_orphans(
                             table_name=table_name,
-                            fact_df=clean_df,
+                            fact_df=clean_relation,
                             dims_names=self.dim_cache,
                             batch_id=batch_id
                         )

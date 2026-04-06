@@ -6,6 +6,7 @@ from db.connections import SnowflakeConnection
 from config.config_loader import Config
 from config.schema_loader import SchemaLoader
 from datetime import datetime
+from processing.monitoring.metrics_tracker import MetricsTracker
 
 
 class DuplicateChecker:
@@ -14,11 +15,12 @@ class DuplicateChecker:
     Prevents duplicate inserts by identifying records that already exist in production
     """
 
-    def __init__(self):
+    def __init__(self, metrics_tracker: MetricsTracker = None):
         """Initialize with Snowflake connection (production DWH)"""
         self.logger = AuditLogger()
         self.config = Config()
         self.schema_loader = SchemaLoader(self.config.req_cols_path())
+        self.metrics_tracker = metrics_tracker
 
         # Connect to Snowflake (production DWH)
         self.snowflake = SnowflakeConnection().conn
@@ -37,19 +39,19 @@ class DuplicateChecker:
             'table_checked': None
         }
 
-    def check_duplicates(self, df, table_name: str, batch_id: str = None) -> Dict[str, Any]:
+    def check_duplicates(self, relation, table_name: str, batch_id: str = None) -> Dict[str, Any]:
         """
         Check for duplicates between incoming DataFrame and Snowflake DWH
 
         Args:
-            df: DuckDB relation, pandas DataFrame, or list of dicts with incoming data
+            relation: DuckDB relation, pandas DataFrame, or list of dicts with incoming data
             table_name: Name of the table (orders, tickets, customers, etc.)
             batch_id: Optional batch identifier for logging (e.g., '2026-02-20' or '2026-02-20_09')
 
         Returns:
             Dictionary with:
-                - unique_df: DataFrame with only new records (no duplicates)
-                - duplicate_df: DataFrame with records that already exist in Snowflake
+                - unique_relation: DataFrame with only new records (no duplicates)
+                - duplicate_relation: DataFrame with records that already exist in Snowflake
                 - metrics: Quality metrics about the check
         """
         self.quality_metrics['check_timestamp'] = datetime.now()
@@ -58,15 +60,15 @@ class DuplicateChecker:
         # Convert input to DuckDB for processing
         temp_table = f"temp_{table_name}_{batch_id or 'stream'}_{int(datetime.now().timestamp())}"
 
-        if hasattr(df, 'register'):
+        if hasattr(relation, 'register'):
             # Already a DuckDB relation
-            self.duckdb.register(temp_table, df)
-        elif isinstance(df, pd.DataFrame):
-            self.duckdb.register(temp_table, df)
+            self.duckdb.register(temp_table, relation)
+        elif isinstance(relation, pd.DataFrame):
+            self.duckdb.register(temp_table, relation)
         else:
             # Assume it's a list of dicts
-            temp_df = pd.DataFrame(df)
-            self.duckdb.register(temp_table, temp_df)
+            temp_relation = pd.DataFrame(relation)
+            self.duckdb.register(temp_table, temp_relation)
 
         # Get total records
         total_records = self.duckdb.execute(f"SELECT COUNT(*) FROM {temp_table}").fetchone()[0]
@@ -75,8 +77,8 @@ class DuplicateChecker:
         if total_records == 0:
             self.logger.log_warning(f"No records to check for {table_name}")
             return {
-                'unique_df': df,
-                'duplicate_df': None,
+                'unique_relation': relation,
+                'duplicate_relation': None,
                 'metrics': self.quality_metrics,
                 'warning': 'Empty DataFrame'
             }
@@ -87,8 +89,8 @@ class DuplicateChecker:
         if not primary_keys:
             self.logger.log_err(f"No primary keys defined for {table_name} in schema.yaml")
             return {
-                'unique_df': df,
-                'duplicate_df': None,
+                'unique_relation': relation,
+                'duplicate_relation': None,
                 'metrics': self.quality_metrics,
                 'error': f'No primary keys defined for {table_name}'
             }
@@ -108,11 +110,11 @@ class DuplicateChecker:
             # Fetch existing keys from Snowflake and load into DuckDB
             snowflake_cursor = self.snowflake.cursor()
             snowflake_cursor.execute(snowflake_query)
-            existing_keys_df = snowflake_cursor.fetch_pandas_all()
+            existing_keys_relation = snowflake_cursor.fetch_pandas_all()
 
-            if len(existing_keys_df) > 0:
+            if len(existing_keys_relation) > 0:
                 # Register existing keys in DuckDB
-                self.duckdb.register("existing_keys", existing_keys_df)
+                self.duckdb.register("existing_keys", existing_keys_relation)
 
                 # Build duplicate detection query
                 join_conditions = " AND ".join([
@@ -136,15 +138,19 @@ class DuplicateChecker:
                     WHERE ek.{primary_keys[0]} IS NULL
                 """
 
-                duplicate_df = self.duckdb.execute(duplicate_query).fetchdf()
-                unique_df = self.duckdb.execute(new_records_query)
+                duplicate_relation = self.duckdb.execute(duplicate_query).fetchdf()
+                unique_relation = self.duckdb.execute(new_records_query)
 
                 # Update metrics
-                self.quality_metrics['duplicates_found'] = len(duplicate_df)
-                self.quality_metrics['new_records'] = total_records - len(duplicate_df)
+                self.quality_metrics['duplicates_found'] = len(duplicate_relation)
+                self.quality_metrics['new_records'] = total_records - len(duplicate_relation)
                 self.quality_metrics['duplicate_rate'] = (
-                    len(duplicate_df) / total_records if total_records > 0 else 0
+                    len(duplicate_relation) / total_records if total_records > 0 else 0
                 )
+                # Update metrics tracker
+                if self.metrics_tracker:
+                    self.metrics_tracker.update_records(total_records)
+                    self.metrics_tracker.update_duplicates(len(duplicate_relation))
 
                 # Log results
                 self.logger.log_msg(
@@ -166,20 +172,20 @@ class DuplicateChecker:
                     )
 
                 # Log duplicate examples
-                if len(duplicate_df) > 0 and len(duplicate_df) <= 5:
-                    for _, row in duplicate_df.iterrows():
+                if len(duplicate_relation) > 0 and len(duplicate_relation) <= 5:
+                    for _, row in duplicate_relation.iterrows():
                         pk_values = {pk: row[pk] for pk in primary_keys}
                         self.logger.log_warning(f"  Duplicate: {pk_values}")
-                elif len(duplicate_df) > 0:
+                elif len(duplicate_relation) > 0:
                     self.logger.log_warning(
-                        f"  First 5 duplicates: {duplicate_df[primary_keys].head().to_dict('records')}")
+                        f"  First 5 duplicates: {duplicate_relation[primary_keys].head().to_dict('records')}")
 
             else:
                 # No existing records in Snowflake
                 self.quality_metrics['duplicates_found'] = 0
                 self.quality_metrics['new_records'] = total_records
                 self.quality_metrics['duplicate_rate'] = 0.0
-                unique_df = self.duckdb.execute(f"SELECT * FROM {temp_table}")
+                unique_relation = self.duckdb.execute(f"SELECT * FROM {temp_table}")
 
                 self.logger.log_msg(
                     f"No existing records found in Snowflake for {table_name}. "
@@ -191,8 +197,8 @@ class DuplicateChecker:
             self.duckdb.execute("DROP TABLE IF EXISTS existing_keys")
 
             return {
-                'unique_df': unique_df,
-                'duplicate_df': duplicate_df if 'duplicate_df' in locals() and len(duplicate_df) > 0 else None,
+                'unique_relation': unique_relation,
+                'duplicate_relation': duplicate_relation if 'duplicate_relation' in locals() and len(duplicate_relation) > 0 else None,
                 'metrics': self.quality_metrics.copy()
             }
 
@@ -203,8 +209,8 @@ class DuplicateChecker:
 
             # On error, return original DF (fail safe - process anyway)
             return {
-                'unique_df': df,
-                'duplicate_df': None,
+                'unique_relation': relation,
+                'duplicate_relation': None,
                 'metrics': self.quality_metrics,
                 'error': str(e)
             }
