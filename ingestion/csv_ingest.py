@@ -9,7 +9,7 @@ class CSVIngest(Ingester):
     def __init__(self, file_path: str):
         self.file_path = file_path
         self.audit_logger= logger.AuditLogger()
-        self.duckdb = DuckDBConnection()
+        self.duckdb = DuckDBConnection().conn
 
     def ingest(self):
         self.audit_logger.log_msg(f"Ingesting data from {self.file_path}...")

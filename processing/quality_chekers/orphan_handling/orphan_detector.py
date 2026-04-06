@@ -1,6 +1,7 @@
 from time import sleep
 from core.logger import AuditLogger
 from db.connections import DuckDBConnection
+from config.required_cols_loader import RequiredColsLoader
 from config.schema_loader import SchemaLoader
 from config.config_loader import Config
 from processing.error_batch_writer import ErrorBatchWriter
@@ -14,6 +15,7 @@ class OrphanChecker:
         self.duckdb = DuckDBConnection().conn
         self.logger = AuditLogger()
         self.config = Config()
+        self.req_cols_schema = RequiredColsLoader(self.config.req_cols_path())
         self.schema = SchemaLoader(self.config.schemas_path())
 
         self.writer = ErrorBatchWriter()
@@ -23,7 +25,7 @@ class OrphanChecker:
     def detect_orphans(self, table_name, fact_df, dims_names, batch_id):
 
         self.duckdb.register("fact_table", fact_df)
-        foreign_keys = self.schema.get_foreign_keys(table_name)
+        foreign_keys = self.req_cols_schema.get_foreign_keys(table_name)
         primary_key = self.schema.get_primary_key(table_name)
 
         all_orphans = []

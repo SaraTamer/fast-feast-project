@@ -6,7 +6,7 @@ from ingestion.ingester_factory import FactoryIngester
 from processing.monitoring.metrics_tracker import MetricsTracker
 from processing.quality_chekers.null_checker import NullChecker
 from processing.quality_chekers.orphan_handling.orphan_detector import OrphanChecker
-
+from utils.utils import get_table_name
 
 class BatchPipeline:
 
@@ -27,7 +27,7 @@ class BatchPipeline:
             return
         ingester = FactoryIngester(file_path).get_reader()
         batch_id = str(uuid.uuid4())
-        table_name = ingester.get_table_name()
+        table_name = get_table_name(file_path)
         try:
             if ingester:
                 relation = ingester.ingest()
