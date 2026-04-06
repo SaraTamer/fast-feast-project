@@ -124,7 +124,7 @@ class NullChecker:
 
         # Get clean records (no nulls in non-null columns)
         clean_records_query = f'SELECT * FROM "{temp_table}" WHERE NOT ({null_conditions})'
-        clean_df = self.duckdb.execute(clean_records_query)
+        clean_df = self.duckdb.execute(clean_records_query).fetchdf()
 
         # Calculate null percentages per column
         null_summary = {}

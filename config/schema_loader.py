@@ -15,3 +15,5 @@ class SchemaLoader:
         return self.schemas.get(table_name, {}).get('types', {})
     def get_foreign_keys(self, table_name: str):
         return self.schemas.get(table_name,{}).get('foreign_keys', [])
+    def get_primary_key(self, table_name: str):
+        return self.schemas.get(table_name,{}).get('primary_key', [])
