@@ -1,4 +1,4 @@
-from utils.file_utils import get_file_extension
+from utils.utils import get_file_extension
 
 from .csv_ingest import CSVIngest
 from .json_ingest import JSONIngest
