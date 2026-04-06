@@ -55,3 +55,17 @@ class DataTypeValidator(BaseValidator):
                 error_type="TYPE_MISMATCH",
                 retryable=False,
             )
+
+        # ── Step 4: Check remaining ──
+        if clean_relation is None or clean_relation.count("*").fetchone()[0] == 0:
+            self.audit_logger.log_err(
+                f"FAILED: '{table_name}' — all rows quarantined"
+            )
+            return False, None
+
+        clean_count = clean_relation.count("*").fetchone()[0]
+        self.audit_logger.log_msg(
+            f"PASSED: '{table_name}' — {clean_count} clean rows"
+        )
+        return True, clean_relation
+
