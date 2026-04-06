@@ -4,108 +4,38 @@ from processing.validators.base_validator import BaseValidator
 from config.schema_loader import SchemaLoader
 from config.type_mapping import duckdb_type_to_yaml
 from db.RowSeparator import RowSeparator
-from processing.error_batch_writer import ErrorBatchWriter
+from db.QuarantineWriter import QuarantineWriter
 
 
 class DataTypeValidator(BaseValidator):
-    def __init__(self, loader: SchemaLoader):
+    def __init__(self, loader: SchemaLoader, quarantine_writer: QuarantineWriter = None):
         self.loader = loader
         self.audit_logger = logger.AuditLogger()
         self.separator = RowSeparator()
-        self.error_writer = ErrorBatchWriter()
+        self.quarantine = quarantine_writer or QuarantineWriter()
 
-    def validate(self, relation: duckdb.DuckDBPyRelation, table_name: str,
-                 batch_id: str = None):
-        """
-        Returns:
-            (True,  relation)       → all rows valid
-            (True,  clean_relation) → some quarantined, rest clean
-            (False, None)           → nothing left
-        """
-        yaml_types = self.loader.get_data_types(table_name)
-        primary_key = self.loader.get_primary_key(table_name)
-
-        # ── Step 1: Column-level check ──
-        mismatched = self._find_mismatches(
-            relation.columns, relation.dtypes, yaml_types, table_name
-        )
-
-        if not mismatched:
-            self.audit_logger.log_msg(
-                f"PASSED: '{table_name}' all types match"
-            )
-            return True, relation
-
-        # ── Step 2: Row-level separation ──
-        self.audit_logger.log_warning(
-            f"'{table_name}': {len(mismatched)} type mismatches -> checking rows"
-        )
-
-        clean_relation, bad_rows_df = self.separator.separate(
-            relation, mismatched
-        )
-
-        # ── Step 3: Quarantine bad rows ──
-        if bad_rows_df is not None and len(bad_rows_df) > 0:
-            rows = []
-
-            for idx, row in bad_rows_df.iterrows():
-                event_id = None
-
-                # Try extract PK
-                if primary_key and primary_key in row and row[primary_key] is not None:
-                    event_id = str(row[primary_key])
-                else:
-                    event_id = f"type_{idx}"
-
-                rows.append((
-                    event_id,
-                    row.to_dict()
-                ))
-
-            self.error_writer.write_batch(
-                table_name=table_name,
-                batch_id=batch_id,
-                rows=rows,
-                error_type="TYPE_MISMATCH",
-                error_column="multiple",
-                fk_table=None,
-                is_retryable=False
-            )
-
-        # ── Step 4: Check remaining ──
-        if clean_relation is None or clean_relation.count("*").fetchone()[0] == 0:
-            self.audit_logger.log_err(
-                f"FAILED: '{table_name}' — all rows quarantined"
-            )
-            return False, None
-
-        clean_count = clean_relation.count("*").fetchone()[0]
-        self.audit_logger.log_msg(
-            f"PASSED: '{table_name}' — {clean_count} clean rows"
-        )
-        return True, clean_relation
-
-    def _find_mismatches(self, columns, dtypes, yaml_types, table_name):
-        mismatched = []
-
-        for col_name, duckdb_type in zip(columns, dtypes):
-            if col_name not in yaml_types:
-                continue
-
-            actual = duckdb_type_to_yaml(duckdb_type)
-            expected = yaml_types[col_name].lower()
-
-            if actual != expected:
-                mismatched.append({
-                    "column": col_name,
-                    "expected_yaml": expected,
-                    "actual_duckdb": str(duckdb_type),
-                    "actual_yaml": actual,
-                })
-                self.audit_logger.log_warning(
-                    f"  {table_name}.{col_name}: "
-                    f"expected '{expected}', got '{duckdb_type}' (='{actual}')"
-                )
-
-        return mismatched
+    def validate(self, relation: duckdb.DuckDBPyRelation, table_name: str) -> bool:
+        # Cross-checks DuckDB's native data type inference against schema.yaml definitions.
+        expected_types = self.loader.get_data_types(table_name)
+        
+        actual_types = relation.dtypes
+        columns = relation.columns
+        
+        # Loop over every column and check its duckdb type against YAML
+        for col_name, actual_type in zip(columns, actual_types):
+            actual_type_str = str(actual_type).upper()
+            
+            if col_name in expected_types:
+                target_type = expected_types[col_name].lower()
+                
+                # Check mapping rules
+                if target_type == "int" and "INT" not in actual_type_str:
+                    self.audit_logger.log_err(f"Something Wrong: {table_name}.{col_name} is {actual_type_str}, expected INT.")
+                    return False
+                    
+                if target_type == "float" and "DOUBLE" not in actual_type_str and "FLOAT" not in actual_type_str:
+                    self.audit_logger.log_err(f"Something Wrong: {table_name}.{col_name} is {actual_type_str}, expected FLOAT.")
+                    return False
+                    
+        self.audit_logger.log_msg(f"SUCCESS: '{table_name}' passed Data Type Validation.")
+        return True
