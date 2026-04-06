@@ -35,3 +35,12 @@ class DataTypeValidator(BaseValidator):
                 f"PASSED: '{table_name}' all types match"
             )
             return True, relation
+
+        # ── Step 2: Row-level separation ──
+        self.audit_logger.log_warning(
+            f"'{table_name}': {len(mismatched)} type mismatches -> checking rows"
+        )
+
+        clean_relation, bad_rows_df = self.separator.separate(
+            relation, mismatched
+        )
