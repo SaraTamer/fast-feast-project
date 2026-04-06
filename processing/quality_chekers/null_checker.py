@@ -122,7 +122,7 @@ class NullChecker:
 
         # Find records with nulls
         null_conditions = " OR ".join([f'"{col}" IS NULL' for col in non_null_columns])
-        null_records_relation = self.duckdb.execute(f'SELECT * FROM "{temp_table}" WHERE {null_conditions}').fetchrelation()
+        null_records_relation = self.duckdb.execute(f'SELECT * FROM "{temp_table}" WHERE {null_conditions}').fetchdf()
         clean_records_count = total_records - len(null_records_relation)
 
         # Get clean records (no nulls in non-null columns)
