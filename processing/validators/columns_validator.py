@@ -31,6 +31,12 @@ class ColumnsValidator(BaseValidator):
             if col not in actual_lower:
                 self.audit_logger.log_err(f"CRITICAL: '{table_name}' is missing required field: '{col}'. Dropping file.")
                 return False
+            
+        # check for extra columns
+        for col in actual_lower:
+            if col not in required_lower:
+                self.audit_logger.log_err(f"CRITICAL: '{table_name}' has extra column: '{col}'. Dropping file.")
+                return False
                 
         self.audit_logger.log_msg(f"SUCCESS: '{table_name}' passed Columns Validation.")
         return True
