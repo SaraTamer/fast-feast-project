@@ -4,16 +4,17 @@ from config.schema_loader import SchemaLoader
 from processing.validators.filename_validator import FilenameValidator
 from processing.validators.columns_validator import ColumnsValidator
 from processing.validators.datatype_validator import DataTypeValidator
+from db.QuarantineWriter import QuarantineWriter
 
 class SchemaValidator:
-    def __init__(self, schema_loader: SchemaLoader):
+    def __init__(self, schema_loader: SchemaLoader, quarantine_writer: QuarantineWriter = None):
         self.audit_logger = logger.AuditLogger()
         self.loader = schema_loader
         
         # Workers
         self.filename_validator = FilenameValidator(schema_loader)
         self.columns_validator = ColumnsValidator(schema_loader)
-        self.datatype_validator = DataTypeValidator(schema_loader)
+        self.datatype_validator = DataTypeValidator(schema_loader, quarantine_writer)
 
     def validate_schema(self, file_path: str, relation: duckdb.DuckDBPyRelation):
 
