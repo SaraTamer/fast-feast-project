@@ -24,29 +24,30 @@ class BatchPipeline:
             self.logger.log_msg(f"Skipping {file_path} (already processed)")
             return
         ingester = FactoryIngester(file_path).get_reader()
-        relation = ingester.ingest()
-        if relation['data'] is None or relation['is_empty']:
-            return
-        valid_relation, table_name = self.validator.validate_schema(
-            file_path,
-            relation['data']
-        )
-
-        if valid_relation is None:
-            self.logger.log_err(f"{file_path} failed schema validation")
-            return
-
         batch_id = str(uuid.uuid4())
         table_name = ingester.get_table_name()
-        null_check_result = self.null_checker.check_null_values(
-            df=valid_relation,
-            file_path=file_path,
-            table_name=table_name,
-            batch_id=batch_id,
-        )
-        clean_df = null_check_result['clean_df']
+        try:
+            if ingester:
+                relation = ingester.ingest()
+                if relation['data'] is not None and not relation['is_empty']:
+                    valid_relation, _ = self.validator.validate_schema(file_path, relation['data'])
+                    if valid_relation:
+                        print(f"\nData validated, this is a sample:")
+                        print(valid_relation.limit(5))
 
-        if null_check_result['metrics']['clean_records_count'] == 0:
-            self.logger.log_warning(f"No clean records for {table_name}. Skipping further processing.")
+                        null_check_result = self.null_checker.check_null_values(
+                            df=valid_relation,
+                            file_path=file_path,
+                            table_name=table_name,
+                            batch_id=batch_id,
+                        )
+                        clean_df = null_check_result['clean_df']
+                        if null_check_result['metrics']['clean_records_count'] == 0:
+                            self.logger.log_warning(f"No clean records for {table_name}. Skipping further processing.")
 
-        self.metadata_tracker.log_file_processed(file_path)
+                        self.metadata_tracker.log_file_processed(file_path)
+                    else:
+                        print(f"{file_path} failed Schema Validation. Dropping file.")
+        except Exception as e:
+            print(f"An error occurred while processing the file: {e}")
+

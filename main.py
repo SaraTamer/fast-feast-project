@@ -33,6 +33,7 @@ class PipelineApp:
         )
 
         self.stream_pipeline = StreamPipeline(
+            metadata,
             validator,
             self.dim_cache
         )
@@ -47,20 +48,47 @@ class PipelineApp:
             self.stream_pipeline.process_event
         )
 
+        self.t1 = None
+        self.t2 = None
+
     def start(self):
 
         self.logger.log_msg("Starting Batch + Stream pipelines")
 
-        t1 = threading.Thread(target=self.batch_watcher.watch_dog)
-        t2 = threading.Thread(target=self.stream_watcher.watch_dog)
+        self.t1 = threading.Thread(target=self.batch_watcher.watch_dog)
+        self.t2 = threading.Thread(target=self.stream_watcher.watch_dog)
 
-        t1.start()
-        t2.start()
+        self.t1.start()
+        self.t2.start()
 
-        while True:
-            time.sleep(1)
 
+    def stop(self):
+        print("\nCtrl+C caught — shutting down...")
+
+        # Stop watchers properly
+        self.stream_watcher.stop()
+        self.batch_watcher.stop()
+
+        # Wait for threads to exit
+        if self.t1: self.t1.join()
+        if self.t2: self.t2.join()
+
+        print("Shutdown complete.")
+
+class MainApp:
+    def __init__(self):
+
+        # Initialize core components
+        self.pipeline = PipelineApp()
+
+    def run(self):
+        self.pipeline.start()
+        try:
+            while True:
+                time.sleep(1) # Keep main thread alive
+        except KeyboardInterrupt:
+            self.pipeline.stop()
 
 if __name__ == "__main__":
-    app = PipelineApp()
-    app.start()
+    app = MainApp()
+    app.run()
