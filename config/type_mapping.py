@@ -23,6 +23,7 @@ DUCKDB_TO_YAML = {
     "DECIMAL":    "float",
     "VARCHAR":    "string",
     "JSON":       "string",
+    "UUID":       "string",
     "DATE":       "date",
     "TIMESTAMP":  "timestamp",
     "TIMESTAMP WITH TIME ZONE": "timestamp",
