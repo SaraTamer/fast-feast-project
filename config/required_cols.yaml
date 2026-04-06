@@ -88,14 +88,10 @@ tables:
   customers:
     required_columns:
       - customer_id
-      - customer_name
-      - customer_email
       - region_id
       - segment_id
     types:
       customer_id: VARCHAR
-      customer_name: VARCHAR
-      customer_email: VARCHAR
       region_id: VARCHAR
       segment_id: VARCHAR
     primary_keys:

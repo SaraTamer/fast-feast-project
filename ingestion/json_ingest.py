@@ -1,3 +1,5 @@
+import os
+
 from .base_ingester import Ingester
 import core.logger as logger
 import duckdb as dd
@@ -12,10 +14,16 @@ class JSONIngest(Ingester):
             data = dd.read_json(self.file_path)
             if self.empty(data):
                 self.audit_logger.log_warning(f"{self.file_path} is empty")
+                return {'data':data, 'is_empty':True}
             else:
                 self.audit_logger.log_msg("Data ingested successfully!")
-            return data
+            return {'data':data, 'is_empty':False}
         except Exception as e:
             self.audit_logger.log_err(f"An error occurred while ingesting data: {e}")
-            return None
+            return {'data':None, 'is_empty':False}
 
+    def get_table_name(self) -> str:
+        """Extract table name from file path"""
+        filename = os.path.basename(self.file_path)
+        table_name = filename.split('.')[0]
+        return table_name

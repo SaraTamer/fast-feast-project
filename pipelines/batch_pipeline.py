@@ -1,8 +1,9 @@
+import os
 import uuid
 
 from core.logger import AuditLogger
 from ingestion.ingester_factory import FactoryIngester
-from processing.schema_validator import SchemaValidator
+from processing.quality_chekers.null_checker import NullChecker
 from processing.quality_chekers.orphan_handling.orphan_detector import OrphanChecker
 
 
@@ -15,6 +16,7 @@ class BatchPipeline:
         self.validator = validator
         self.dim_cache = dim_cache
         self.orphan_checker = OrphanChecker()
+        self.null_checker = NullChecker()
 
     def process_file(self, file_path):
 
@@ -23,16 +25,28 @@ class BatchPipeline:
             return
         ingester = FactoryIngester(file_path).get_reader()
         relation = ingester.ingest()
-        if relation is None:
-            self.logger.log_err(f"{file_path} ingestion failed")
+        if relation['data'] is None or relation['is_empty']:
             return
         valid_relation, table_name = self.validator.validate_schema(
             file_path,
-            relation
+            relation['data']
         )
 
         if valid_relation is None:
             self.logger.log_err(f"{file_path} failed schema validation")
             return
+
+        batch_id = str(uuid.uuid4())
+        table_name = ingester.get_table_name()
+        null_check_result = self.null_checker.check_null_values(
+            df=valid_relation,
+            file_path=file_path,
+            table_name=table_name,
+            batch_id=batch_id,
+        )
+        clean_df = null_check_result['clean_df']
+
+        if null_check_result['metrics']['clean_records_count'] == 0:
+            self.logger.log_warning(f"No clean records for {table_name}. Skipping further processing.")
 
         self.metadata_tracker.log_file_processed(file_path)

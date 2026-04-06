@@ -1,6 +1,8 @@
+import re
+
 import duckdb
 import pandas as pd
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 from core.logger import AuditLogger
 from config.config_loader import Config
 from config.required_cols_loader import RequiredColsLoader
@@ -32,41 +34,47 @@ class NullChecker:
             'check_timestamp': None
         }
 
-    def check_null_values(self, df, table_name: str, batch_id: str = None,
+    def check_null_values(self, df, file_path, table_name: str, batch_id: str = None,
                           check_pks: bool = True, check_fks: bool = True,
                           quarantine_nulls: bool = True) -> Dict[str, Any]:
         """
         Check for null values in required fields, primary keys, and foreign keys
-
-        Args:
-            df: DuckDB relation, pandas DataFrame, or list of dicts
-            table_name: Name of the table (orders, tickets, customers, etc.)
-            batch_id: Optional batch identifier for logging (e.g., '2026-02-20' or '2026-02-20_09')
-            check_pks: Whether to check primary keys for nulls
-            check_fks: Whether to check foreign keys for nulls
-            quarantine_nulls: Whether to quarantine records with nulls in required columns
-
-        Returns:
-            Dictionary with:
-                - clean_df: DataFrame with no nulls in required fields
-                - null_records_df: DataFrame containing records with nulls
-                - null_summary: Summary of null counts per column
-                - metrics: Quality metrics
         """
-        global error_column
         self.quality_metrics['check_timestamp'] = datetime.now()
         self.quality_metrics['total_checks_performed'] += 1
 
-        # Convert input to DuckDB
-        temp_table = f"temp_null_check_{table_name}_{batch_id or 'stream'}_{int(datetime.now().timestamp())}"
+        # Sanitize table name for DuckDB compatibility
+        sanitized_table_name = self._sanitize_table_name(table_name)
+        sanitized_batch_id = self._sanitize_table_name(batch_id)
 
-        if hasattr(df, 'register'):
-            self.duckdb.register(temp_table, df)
-        elif isinstance(df, pd.DataFrame):
-            self.duckdb.register(temp_table, df)
+        # Create sanitized temp table name
+        timestamp = int(datetime.now().timestamp())
+        temp_table = f"temp_null_check_{sanitized_table_name}_{sanitized_batch_id}_{timestamp}"
+
+        # For JSON files, bypass DuckDB's automatic parsing and handle directly
+        if file_path and file_path.endswith('.json'):
+            try:
+                duckdb_table = self._handle_json_file_directly(file_path, temp_table)
+            except Exception as e:
+                self.logger.log_err(f"Failed to handle JSON file directly: {e}")
+                return {
+                    'clean_df': df,
+                    'null_records_df': None,
+                    'null_summary': {},
+                    'metrics': {'error': f'JSON handling failed: {e}'}
+                }
         else:
-            temp_df = pd.DataFrame(df)
-            self.duckdb.register(temp_table, temp_df)
+            # Convert the input to a DuckDB table (handles various types)
+            try:
+                duckdb_table = self._convert_to_duckdb_table(df, temp_table, file_path)
+            except Exception as e:
+                self.logger.log_err(f"Failed to convert to DuckDB table: {e}")
+                return {
+                    'clean_df': df,
+                    'null_records_df': None,
+                    'null_summary': {},
+                    'metrics': {'error': f'Conversion failed: {e}'}
+                }
 
         # Get schema definitions
         schema = self.req_cols_loader.tables.get(table_name, {})
@@ -79,7 +87,7 @@ class NullChecker:
 
         if not non_null_columns:
             self.logger.log_warning(f"No non-null columns defined for {table_name}")
-            self.duckdb.execute(f"DROP TABLE IF EXISTS {temp_table}")
+            self._safe_drop(temp_table)
             return {
                 'clean_df': df,
                 'null_records_df': None,
@@ -88,11 +96,21 @@ class NullChecker:
             }
 
         # Get total records
-        total_records = self.duckdb.execute(f"SELECT COUNT(*) FROM {temp_table}").fetchone()[0]
+        try:
+            total_records = self.duckdb.execute(f"SELECT COUNT(*) FROM {temp_table}").fetchone()[0]
+        except Exception as e:
+            self.logger.log_err(f"Error getting record count: {e}")
+            self._safe_drop(temp_table)
+            return {
+                'clean_df': df,
+                'null_records_df': None,
+                'null_summary': {},
+                'metrics': {'error': f'Query failed: {e}'}
+            }
 
         if total_records == 0:
             self.logger.log_warning(f"No records to check for {table_name}")
-            self.duckdb.execute(f"DROP TABLE IF EXISTS {temp_table}")
+            self._safe_drop(temp_table)
             return {
                 'clean_df': df,
                 'null_records_df': None,
@@ -101,23 +119,20 @@ class NullChecker:
             }
 
         # Find records with nulls
-        null_conditions = " OR ".join([f"{col} IS NULL" for col in non_null_columns])
-        null_records_df = self.duckdb.execute(f"SELECT * FROM {temp_table} WHERE {null_conditions}").fetchdf()
+        null_conditions = " OR ".join([f'"{col}" IS NULL' for col in non_null_columns])
+        null_records_df = self.duckdb.execute(f'SELECT * FROM "{temp_table}" WHERE {null_conditions}').fetchdf()
 
         # Get clean records (no nulls in non-null columns)
-        clean_records_query = f"SELECT * FROM {temp_table} WHERE NOT ({null_conditions})"
+        clean_records_query = f'SELECT * FROM "{temp_table}" WHERE NOT ({null_conditions})'
         clean_df = self.duckdb.execute(clean_records_query)
 
         # Calculate null percentages per column
         null_summary = {}
         columns_with_nulls = []
-        rows_with_nulls = []  # Store rows for quarantine
+        rows_with_nulls = []
 
         for col in non_null_columns:
-            null_count_query = f"""
-                SELECT COUNT(*) FROM {temp_table} 
-                WHERE {col} IS NULL
-            """
+            null_count_query = f'SELECT COUNT(*) FROM "{temp_table}" WHERE "{col}" IS NULL'
             null_count = self.duckdb.execute(null_count_query).fetchone()[0]
             null_percentage = (null_count / total_records * 100) if total_records > 0 else 0
             null_summary[col] = {
@@ -133,20 +148,16 @@ class NullChecker:
 
         # Prepare rows for quarantine (records with nulls in required columns)
         if quarantine_nulls and len(null_records_df) > 0:
-            # Convert null records to list of tuples for the ErrorBatchWriter
             for idx, row in null_records_df.iterrows():
-                # Get the primary key value as event_id (use first available ID column)
                 event_id = None
                 for pk in primary_keys:
                     if pk in row and pd.notna(row[pk]):
                         event_id = str(row[pk])
                         break
 
-                # If no primary key found, use row index
                 if event_id is None:
                     event_id = f"null_row_{idx}"
 
-                # Determine which required columns are null
                 null_columns = []
                 for col in required_cols:
                     if col in row and pd.isna(row[col]):
@@ -154,14 +165,11 @@ class NullChecker:
 
                 error_column = ", ".join(null_columns) if null_columns else "multiple_required_columns"
 
-                # Create row tuple for ErrorBatchWriter
-                # Format: (event_id, raw_payload) - will be expanded by write_batch
                 rows_with_nulls.append((
                     event_id,
-                    row.to_dict()  # Store the entire row as payload
+                    row.to_dict()
                 ))
 
-            # Quarantine the records with nulls
             try:
                 self.error_writer.write_batch(
                     table_name=table_name,
@@ -169,8 +177,8 @@ class NullChecker:
                     rows=rows_with_nulls,
                     error_type="NULL_REQUIRED_COLUMN",
                     error_column=error_column,
-                    fk_table=None,  # Not applicable for null checks
-                    is_retryable=False  # Nulls are not retryable without fixing source data
+                    fk_table=None,
+                    is_retryable=False
                 )
                 self.quality_metrics['quarantined_records'] = len(rows_with_nulls)
                 self.logger.log_msg(
@@ -202,17 +210,17 @@ class NullChecker:
             if stats['null_percentage'] > max_null_percentage:
                 if stats['is_required']:
                     self.logger.log_err(
-                        f"❌ CRITICAL: High null percentage for {table_name}.{col}: "
+                        f"CRITICAL: High null percentage for {table_name}.{col}: "
                         f"{stats['null_percentage']:.2f}% (threshold: {max_null_percentage}%)"
                     )
                 else:
                     self.logger.log_warning(
-                        f"⚠️ High null percentage for {table_name}.{col}: "
+                        f"High null percentage for {table_name}.{col}: "
                         f"{stats['null_percentage']:.2f}%"
                     )
 
         # Clean up
-        self.duckdb.execute(f"DROP TABLE IF EXISTS {temp_table}")
+        self._safe_drop(temp_table)
 
         return {
             'clean_df': clean_df,
@@ -221,15 +229,83 @@ class NullChecker:
             'metrics': self.quality_metrics['failed_records'][table_name]
         }
 
+    def _convert_to_duckdb_table(self, df, temp_table: str, file_path: str = None):
+        """
+        Convert various input types to a DuckDB table.
+        Handles: DuckDBPyRelation, pandas DataFrame, dict, list, etc.
+        """
+        # Case 1: Already a DuckDB relation
+        if isinstance(df, duckdb.DuckDBPyRelation):
+            try:
+                sql_query = df.sql_query() if hasattr(df, 'sql_query') else str(df)
+                self.duckdb.execute(f"CREATE OR REPLACE TABLE {temp_table} AS ({sql_query})")
+                return self.duckdb.table(temp_table)
+            except Exception as e:
+                self.logger.log_warning(f"Failed to use SQL query, falling back to arrow: {e}")
+                arrow_table = df.arrow()
+                self.duckdb.register(temp_table, arrow_table)
+                return self.duckdb.table(temp_table)
+
+        # Case 2: pandas DataFrame
+        elif isinstance(df, pd.DataFrame):
+            self.duckdb.register(temp_table, df)
+            return self.duckdb.table(temp_table)
+
+        # Case 3: Dictionary
+        elif isinstance(df, dict):
+            pandas_df = pd.DataFrame([df]) if not isinstance(list(df.values())[0], list) else pd.DataFrame(df)
+            self.duckdb.register(temp_table, pandas_df)
+            return self.duckdb.table(temp_table)
+
+        # Case 4: List of dictionaries
+        elif isinstance(df, list):
+            if len(df) > 0 and isinstance(df[0], dict):
+                pandas_df = pd.DataFrame(df)
+            else:
+                pandas_df = pd.DataFrame({'data': df})
+            self.duckdb.register(temp_table, pandas_df)
+            return self.duckdb.table(temp_table)
+
+        # Case 5: Tuple or other iterable
+        elif isinstance(df, tuple):
+            pandas_df = pd.DataFrame([df])
+            self.duckdb.register(temp_table, pandas_df)
+            return self.duckdb.table(temp_table)
+
+        # Case 6: None or empty
+        elif df is None:
+            self.logger.log_err(f"Input is None for {temp_table}")
+            raise ValueError("Input DataFrame is None")
+
+        # Case 7: Try to convert anything else
+        else:
+            try:
+                pandas_df = pd.DataFrame(df)
+                self.duckdb.register(temp_table, pandas_df)
+                return self.duckdb.table(temp_table)
+            except Exception as e:
+                self.logger.log_err(f"Failed to convert {type(df)} to DataFrame: {e}")
+                raise
+
+    def _safe_drop(self, table_name: str):
+        """Safely drop a table or view if it exists"""
+        try:
+            self.duckdb.execute(f"DROP TABLE IF EXISTS {table_name}")
+        except:
+            try:
+                self.duckdb.execute(f"DROP VIEW IF EXISTS {table_name}")
+            except:
+                pass
+
     def _log_null_results(self, table_name: str, batch_id: str, null_summary: Dict,
                           total: int, null_count: int):
         """Log null check results"""
         if null_count == 0:
             self.logger.log_msg(
-                f"✅ Null check passed for {table_name} (batch: {batch_id}): {total} records, no nulls in required fields")
+                f"Null check passed for {table_name} (batch: {batch_id}): {total} records, no nulls in required fields")
         else:
             self.logger.log_warning(
-                f"⚠️ Null check for {table_name} (batch: {batch_id}): "
+                f"Null check for {table_name} (batch: {batch_id}): "
                 f"{total} total, {null_count} records with nulls ({null_count / total * 100:.2f}%)"
             )
 
@@ -247,6 +323,73 @@ class NullChecker:
                         f"  - {col}: {stats['null_count']} nulls ({stats['null_percentage']:.2f}%) - "
                         f"[{', '.join(field_type)}]"
                     )
+
+    def _sanitize_table_name(self, name: str) -> str:
+        """Sanitize table name to be DuckDB-compatible."""
+        if name is None:
+            return "stream"
+        if not isinstance(name, str):
+            name = str(name)
+        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+        if sanitized and sanitized[0].isdigit():
+            sanitized = f"t_{sanitized}"
+        return sanitized
+
+    def _handle_json_file_directly(self, file_path: str, temp_table: str):
+        """
+        Handle JSON file directly with proper date parsing.
+        Reads JSON and converts date columns correctly.
+        """
+        try:
+            import json
+
+            # Read JSON file
+            with open(file_path, 'r', encoding='utf-8') as f:
+                json_data = json.load(f)
+
+            # Handle both array and object formats
+            if isinstance(json_data, dict):
+                if len(json_data) > 0 and isinstance(list(json_data.values())[0], dict):
+                    records = list(json_data.values())
+                else:
+                    records = [json_data]
+            elif isinstance(json_data, list):
+                records = json_data
+            else:
+                records = [json_data]
+
+            # Convert to pandas DataFrame
+            df = pd.DataFrame(records)
+
+            # Convert ALL string columns that look like dates to datetime
+            for col in df.columns:
+                if df[col].dtype == 'object':
+                    sample = df[col].dropna()
+                    if len(sample) > 0:
+                        first_value = str(sample.iloc[0])
+                        if self._looks_like_date(first_value):
+                            df[col] = pd.to_datetime(df[col], errors='coerce')
+
+            # Register as DuckDB table
+            self.duckdb.register(temp_table, df)
+
+            return self.duckdb.table(temp_table)
+
+        except Exception as e:
+            self.logger.log_err(f"Failed to handle JSON file directly: {e}")
+            raise
+
+    def _looks_like_date(self, value: str) -> bool:
+        """Check if a string looks like a date"""
+        if not isinstance(value, str):
+            return False
+        date_patterns = [
+            r'\d{4}-\d{2}-\d{2}',  # YYYY-MM-DD
+            r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}',  # YYYY-MM-DD HH:MM:SS
+            r'\d{2}/\d{2}/\d{4}',  # MM/DD/YYYY
+            r'\d{2}-\d{2}-\d{4}',  # DD-MM-YYYY
+        ]
+        return any(re.match(pattern, value) for pattern in date_patterns)
 
     def get_quality_report(self) -> Dict:
         """Return comprehensive quality report"""
