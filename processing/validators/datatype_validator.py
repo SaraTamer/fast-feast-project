@@ -14,28 +14,24 @@ class DataTypeValidator(BaseValidator):
         self.separator = RowSeparator()
         self.quarantine = quarantine_writer or QuarantineWriter()
 
-    def validate(self, relation: duckdb.DuckDBPyRelation, table_name: str) -> bool:
-        # Cross-checks DuckDB's native data type inference against schema.yaml definitions.
-        expected_types = self.loader.get_data_types(table_name)
-        
-        actual_types = relation.dtypes
-        columns = relation.columns
-        
-        # Loop over every column and check its duckdb type against YAML
-        for col_name, actual_type in zip(columns, actual_types):
-            actual_type_str = str(actual_type).upper()
-            
-            if col_name in expected_types:
-                target_type = expected_types[col_name].lower()
-                
-                # Check mapping rules
-                if target_type == "int" and "INT" not in actual_type_str:
-                    self.audit_logger.log_err(f"Something Wrong: {table_name}.{col_name} is {actual_type_str}, expected INT.")
-                    return False
-                    
-                if target_type == "float" and "DOUBLE" not in actual_type_str and "FLOAT" not in actual_type_str:
-                    self.audit_logger.log_err(f"Something Wrong: {table_name}.{col_name} is {actual_type_str}, expected FLOAT.")
-                    return False
-                    
-        self.audit_logger.log_msg(f"SUCCESS: '{table_name}' passed Data Type Validation.")
-        return True
+    def validate(self, relation: duckdb.DuckDBPyRelation, table_name: str,
+                 batch_id: str = None):
+        """
+        Returns:
+            (True,  relation)       → all rows valid
+            (True,  clean_relation) → some quarantined, rest clean
+            (False, None)           → nothing left
+        """
+        yaml_types = self.loader.get_data_types(table_name)
+        primary_key = self.loader.get_primary_key(table_name)
+
+        # ── Step 1: Column-level check ──
+        mismatched = self._find_mismatches(
+            relation.columns, relation.dtypes, yaml_types, table_name
+        )
+
+        if not mismatched:
+            self.audit_logger.log_msg(
+                f"PASSED: '{table_name}' all types match"
+            )
+            return True, relation
