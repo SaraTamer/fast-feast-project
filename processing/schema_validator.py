@@ -16,7 +16,8 @@ class SchemaValidator:
         self.columns_validator = ColumnsValidator(schema_loader)
         self.datatype_validator = DataTypeValidator(schema_loader, quarantine_writer)
 
-    def validate_schema(self, file_path: str, relation: duckdb.DuckDBPyRelation):
+    def validate_schema(self, file_path: str, relation: duckdb.DuckDBPyRelation,
+                        batch_id: str = None):
 
         # Filename validation
         table_name = self.filename_validator.validate(file_path)
@@ -30,7 +31,11 @@ class SchemaValidator:
             return False, relation 
 
         # Data Types
-        if not self.datatype_validator.validate(relation, table_name):
+        # 3. Data types + quarantine
+        is_valid, result = self.datatype_validator.validate(
+            relation, table_name, batch_id
+        )
+        if not is_valid:
             self.audit_logger.log_err(f"Pipeline Halted: [{table_name}] data types mismatch.")
             return False, relation
         
