@@ -2,11 +2,17 @@ import duckdb
 import core.logger as logger
 from processing.validators.base_validator import BaseValidator
 from config.schema_loader import SchemaLoader
+from config.type_mapping import duckdb_type_to_yaml
+from db.RowSeparator import RowSeparator
+from db.QuarantineWriter import QuarantineWriter
+
 
 class DataTypeValidator(BaseValidator):
-    def __init__(self, loader: SchemaLoader):
+    def __init__(self, loader: SchemaLoader, quarantine_writer: QuarantineWriter = None):
         self.loader = loader
         self.audit_logger = logger.AuditLogger()
+        self.separator = RowSeparator()
+        self.quarantine = quarantine_writer or QuarantineWriter()
 
     def validate(self, relation: duckdb.DuckDBPyRelation, table_name: str) -> bool:
         # Cross-checks DuckDB's native data type inference against schema.yaml definitions.
