@@ -4,28 +4,26 @@ from watchers.stream_watcher import StreamWatcher
 from watchers.batch_watcher import BatchWatcher
 from config.config_loader import Config
 from ingestion.ingester_factory import FactoryIngester
-from db.metadata_db import MetadataDB
+        self.processing_files = set()
+        self.lock = threading.Lock()        # thread-safe since you use 2 threads; where we will lock on shared variables when we use them for each thread
 
-def pipeline_trigger(file_path):
+    def pipeline_trigger(self, file_path):
+        with self.lock:
+            if file_path in self.processing_files:
+                print(f"Skipping {file_path} (currently being processed)")
+                return
+            if self.metadata_tracker.is_file_processed(file_path):
+                print(f"Skipping {file_path} (already processed)")
+                return
+            # Mark as in-progress
+            self.processing_files.add(file_path)
 
-    file_type = file_path.split('.')[-1] 
-    ingester = FactoryIngester(file_type).get_reader(file_path)
-    try: 
-        if ingester:
-            df=ingester.ingest()
-            if df is not None:
-                print(df.head())
-    except Exception as e:
-        print(f"An error occurred while ingesting the file: {e}")
+        finally:
+            # Always remove from set — success or failure
+            with self.lock:
+                self.processing_files.discard(file_path)
+                print(f"Released {file_path} — ready to accept again")
 
-    
-
-
-
-
-class Main:
-    def __init__(self):
-        self.app_config = Config()
         
         # get the paths from config.yaml  using config_loader.py
         stream_path = self.app_config.stream_input_path()
