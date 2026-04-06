@@ -69,3 +69,26 @@ class DataTypeValidator(BaseValidator):
         )
         return True, clean_relation
 
+    def _find_mismatches(self, columns, dtypes, yaml_types, table_name):
+        mismatched = []
+
+        for col_name, duckdb_type in zip(columns, dtypes):
+            if col_name not in yaml_types:
+                continue
+
+            actual = duckdb_type_to_yaml(duckdb_type)
+            expected = yaml_types[col_name].lower()
+
+            if actual != expected:
+                mismatched.append({
+                    "column": col_name,
+                    "expected_yaml": expected,
+                    "actual_duckdb": str(duckdb_type),
+                    "actual_yaml": actual,
+                })
+                self.audit_logger.log_warning(
+                    f"  {table_name}.{col_name}: "
+                    f"expected '{expected}', got '{duckdb_type}' (='{actual}')"
+                )
+
+        return mismatched
