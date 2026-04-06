@@ -13,8 +13,13 @@ class ColumnsValidator(BaseValidator):
         required_cols = self.loader.get_required_cols(table_name)
         current_cols = relation.columns
 
-        for col in required_cols:
-            if col not in current_cols:
+        # Count check
+        if len(actual_lower) != len(required_lower):
+            self.audit_logger.log_err(
+                f"COLUMN COUNT mismatch in '{table_name}': "
+                f"expected {len(required_lower)}, got {len(actual_lower)}"
+            )
+            return False
                 self.audit_logger.log_err(f"CRITICAL: '{table_name}' is missing required field: '{col}'. Dropping file.")
                 return False
                 
