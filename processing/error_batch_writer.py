@@ -23,7 +23,7 @@ class ErrorBatchWriter:
         self.fully_qualified_stage = f"{self.database}.{self.schema}.{self.stage_name}"
         self.table_name = "streaming_pipeline_errors"
         self.stage_ref = f"@{self.fully_qualified_stage}"
-        self.warehouse_manager = WarehouseManager(self.snowflake, "COMPUTE_WH")
+        self.warehouse_manager = WarehouseManager(self.snowflake)
 
 
 
