@@ -4,15 +4,15 @@ from processing.validators.base_validator import BaseValidator
 from config.schema_loader import SchemaLoader
 from config.type_mapping import duckdb_type_to_yaml
 from db.RowSeparator import RowSeparator
-from db.QuarantineWriter import QuarantineWriter
+from processing.error_batch_writer import ErrorBatchWriter
 
 
 class DataTypeValidator(BaseValidator):
-    def __init__(self, loader: SchemaLoader, quarantine_writer: QuarantineWriter = None):
+    def __init__(self, loader: SchemaLoader):
         self.loader = loader
         self.audit_logger = logger.AuditLogger()
         self.separator = RowSeparator()
-        self.quarantine = quarantine_writer or QuarantineWriter()
+        self.error_writer = ErrorBatchWriter()
 
     def validate(self, relation: duckdb.DuckDBPyRelation, table_name: str,
                  batch_id: str = None):
