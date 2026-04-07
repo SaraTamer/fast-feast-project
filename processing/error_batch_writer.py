@@ -107,7 +107,7 @@ class ErrorBatchWriter:
                        )
                        ON_ERROR='CONTINUE'
                    """)
-
+                self.snowflake.commit()
                 self.logger.log_msg(f"{len(rows)} errors copied into Snowflake")
 
             except Exception as e:

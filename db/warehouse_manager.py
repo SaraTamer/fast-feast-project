@@ -65,5 +65,4 @@ class WarehouseManager:
             self.resume_if_needed()
             yield
         finally:
-            self.conn.commit()
             self.suspend_if_we_resumed()
