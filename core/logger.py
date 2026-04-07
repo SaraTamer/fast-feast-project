@@ -18,7 +18,7 @@ class AuditLogger:
         if not self.logger.handlers:
 
             formatter = logging.Formatter(
-                "%(asctime)s | %(levelname)s |%(threadName)s | %(name)s | %(message)s"
+                "%(asctime)s | %(levelname)s |%(threadName)s | %(message)s"
             )
             file_handler=RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=5)
             file_handler.setLevel(logging.INFO)

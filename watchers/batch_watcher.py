@@ -17,9 +17,7 @@ class BatchWatcher(FileWatcher):
         self.observer.start()
         
         while self._running:
-                time.sleep(1)
-                print("batch_thread")
-            
+                time.sleep(1)            
         self.observer.join()
 
     def stop(self):

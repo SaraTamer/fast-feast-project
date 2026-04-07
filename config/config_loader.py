@@ -19,6 +19,12 @@ class Config:
         return self.settings['paths']['log_file']
     def err_file_path(self):
         return self.settings['paths']['error_log_file']
-    
-    def schema_path(self):
+    def req_cols_path(self):
+        return self.settings['paths']['required_cols_path']
+
+    def schemas_path(self):
         return self.settings['paths']['schema_path']
+    def orphans_wait_time(self):
+        return self.settings['rules']['orphan_check_delay_seconds']
+    def get_errors_table_name(self):
+        return self.settings['snowflake_tables']['errors_table']

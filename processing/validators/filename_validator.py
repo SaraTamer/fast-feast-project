@@ -14,7 +14,7 @@ class FilenameValidator(BaseValidator):
         table_name = base_name.split('.')[0].lower()
         
         if table_name not in self.loader.get_table_names():
-            self.audit_logger.log_err(f"Validation failed: Unrecognized table name '{table_name}' from file {file_path}")
+            self.audit_logger.log_err(f"Something Wrong: Unrecognized table name '{table_name}' from file {file_path}")
             return False
             
         self.audit_logger.log_msg(f"SUCCESS: Recognized table: {table_name}")

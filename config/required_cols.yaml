@@ -1,0 +1,261 @@
+tables:
+  orders:
+    required_columns:
+      - order_id
+      - customer_id
+      - restaurant_id
+      - driver_id
+      - region_id
+    types:
+      order_id: VARCHAR
+      customer_id: VARCHAR
+      restaurant_id: VARCHAR
+      driver_id: VARCHAR
+      region_id: VARCHAR
+    primary_keys:
+      - order_id
+    foreign_keys:
+      - column: customer_id
+        references: customers.customer_id
+      - column: restaurant_id
+        references: restaurants.restaurant_id
+      - column: driver_id
+        references: drivers.driver_id
+      - column: region_id
+        references: regions.region_id
+
+  tickets:
+    required_columns:
+      - ticket_id
+      - order_id
+      - agent_id
+      - customer_id
+      - driver_id
+      - restaurant_id
+      - reason_id
+      - priority_id
+      - channel_id
+    types:
+      ticket_id: VARCHAR
+      order_id: VARCHAR
+      agent_id: VARCHAR
+      customer_id: VARCHAR
+      driver_id: VARCHAR
+      restaurant_id: VARCHAR
+      reason_id: VARCHAR
+      priority_id: VARCHAR
+      channel_id: VARCHAR
+    primary_keys:
+      - ticket_id
+    foreign_keys:
+      - column: order_id
+        references: orders.order_id
+      - column: agent_id
+        references: agents.agent_id
+      - column: customer_id
+        references: customers.customer_id
+      - column: restaurant_id
+        references: restaurants.restaurant_id
+      - column: driver_id
+        references: drivers.driver_id
+      - column: reason_id
+        references: reasons.reason_id
+      - column: channel_id
+        references: channels.channel_id
+      - column: priority_id
+        references: priorities.priority_id
+
+
+  ticket_events:
+    required_columns:
+      - event_id
+      - ticket_id
+      - agent_id
+      - event_ts
+    types:
+      event_id: VARCHAR
+      ticket_id: VARCHAR
+      agent_id: VARCHAR
+      event_ts: TIMESTAMP
+    primary_keys:
+      - event_id
+    foreign_keys:
+      - column: ticket_id
+        references: tickets.ticket_id
+      - column: agent_id
+        references: agents.agent_id
+
+  customers:
+    required_columns:
+      - customer_id
+      - region_id
+      - segment_id
+    types:
+      customer_id: VARCHAR
+      region_id: VARCHAR
+      segment_id: VARCHAR
+    primary_keys:
+      - customer_id
+    foreign_keys:
+      - column: region_id
+        references: regions.region_id
+      - column: segment_id
+        references: segments.segment_id
+
+  drivers:
+    required_columns:
+      - driver_id
+      - driver_name
+      - national_id
+      - region_id
+    types:
+      driver_id: VARCHAR
+      driver_name: VARCHAR
+      national_id: VARCHAR
+      region_id: VARCHAR
+    primary_keys:
+      - driver_id
+    foreign_keys:
+      - column: region_id
+        references: regions.region_id
+
+  restaurants:
+    required_columns:
+      - restaurant_id
+      - restaurant_name
+      - region_id
+      - category_id
+    types:
+      restaurant_id: VARCHAR
+      restaurant_name: VARCHAR
+      region_id: VARCHAR
+      category_id: VARCHAR
+    primary_keys:
+      - restaurant_id
+    foreign_keys:
+      - column: region_id
+        references: regions.region_id
+      - column: category_id
+        references: categories.category_id
+
+  agents:
+    required_columns:
+      - agent_id
+      - agent_name
+      - team_id
+    types:
+      agent_id: VARCHAR
+      agent_name: VARCHAR
+      team_id: VARCHAR
+    primary_keys:
+      - agent_id
+    foreign_keys:
+      - column: team_id
+        references: teams.team_id
+
+  cities:
+    required_columns:
+      - city_id
+      - city_name
+    types:
+      city_id: VARCHAR
+      city_name: VARCHAR
+    primary_keys:
+      - city_id
+
+
+  regions:
+    required_columns:
+      - region_id
+      - region_name
+      - city_id
+    types:
+      region_id: VARCHAR
+      region_name: VARCHAR
+      city_id: VARCHAR
+    primary_keys:
+      - region_id
+    foreign_keys:
+      - column: city_id
+        references: cities.city_id
+
+  reasons:
+    required_columns:
+      - reason_id
+      - reason_name
+      - reason_category_id
+    types:
+      reason_id: VARCHAR
+      reason_name: VARCHAR
+      reason_category_id: VARCHAR
+    primary_keys:
+      - reason_id
+    foreign_keys:
+      - column: reason_category_id
+        references: reason_categories.reason_category_id
+
+  categories:
+    required_columns:
+      - category_id
+      - category_name
+    types:
+      category_id: VARCHAR
+      category_name: VARCHAR
+    primary_keys:
+      - category_id
+
+  segments:
+    required_columns:
+      - segment_id
+      - segment_name
+    types:
+      segment_id: VARCHAR
+      segment_name: VARCHAR
+    primary_keys:
+      - segment_id
+
+  teams:
+    required_columns:
+      - team_id
+      - team_name
+    types:
+      team_id: VARCHAR
+      team_name: VARCHAR
+    primary_keys:
+      - team_id
+
+  channels:
+    required_columns:
+      - channel_id
+      - channel_name
+    types:
+      channel_id: VARCHAR
+      channel_name: VARCHAR
+    primary_keys:
+      - channel_id
+
+  priorities:
+    required_columns:
+      - priority_id
+      - priority_code
+    types:
+      priority_id: VARCHAR
+      priority_code: VARCHAR
+    primary_keys:
+      - priority_id
+
+  reason_categories:
+    required_columns:
+      - reason_category_id
+      - category_name
+    types:
+      reason_category_id: VARCHAR
+      category_name: VARCHAR
+    primary_keys:
+      - reason_category_id
+
+quality_thresholds:
+  max_null_percentage: 5.0
+  max_duplicate_percentage: 1.0
+  max_orphan_percentage: 2.0
+  max_duplicate_rate: 0.10  # 10% max duplicate rate before alert

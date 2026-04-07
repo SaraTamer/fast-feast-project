@@ -9,16 +9,22 @@ paths:
   log_file: "logs/pipeline.log"
   error_log_file: "logs/errors.log"
 
-  schema_path: "Config/schemas.yaml"
+  schema_path: "Config/schema.yaml"
+  required_cols_path: "Config/required_cols.yaml"
 
   # gold_layer_output: ""
 
 rules:
   sla_first_response_minutes: 1
   sla_resolution_minutes: 15
-  orphan_check_delay_minutes: 10
-  
+  orphan_check_delay_seconds: 600
+  max_retries: 5
   supported_formats: ["csv", "json"]
+
+
+snowflake_tables:
+errors_table: "streaming_pipeline_errors"
+
 
 smtp:
   server: ""
