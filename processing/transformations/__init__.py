@@ -20,7 +20,7 @@ class TransformationOrchestrator:
         # Apply PII masking
         relation = self.masker.transform(table_name, relation)
 
-        # Enrich with dimension joins (Gold Layer preparation)
+        # Enrich with dimension joins
         relation = self.enricher.transform(table_name, relation)
 
         # Calculate SLAs and KPIs
