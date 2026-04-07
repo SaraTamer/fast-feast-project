@@ -13,9 +13,9 @@ class TransformationOrchestrator:
         self.metrics = MetricsEngine()
         self.audit = AuditInjector()
 
-    def run_all(self, table_name: str, relation: duckdb.DuckDBPyRelation) -> duckdb.DuckDBPyRelation:
+    def run_all(self, table_name: str, relation: duckdb.DuckDBPyRelation, batch_id: str) -> duckdb.DuckDBPyRelation:
         # Add audit metadata
-        relation = self.audit.transform(relation)
+        relation = self.audit.transform(relation, batch_id)
 
         # Apply PII masking
         relation = self.masker.transform(table_name, relation)
