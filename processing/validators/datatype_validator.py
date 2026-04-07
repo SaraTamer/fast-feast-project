@@ -47,8 +47,21 @@ class DataTypeValidator(BaseValidator):
 
         # ── Step 3: Quarantine bad rows ──
         if bad_rows_df is not None and len(bad_rows_df) > 0:
-            self.quarantine.quarantine(
-                bad_rows_df=bad_rows_df,
+            rows = []
+
+            for idx, row in bad_rows_df.iterrows():
+                event_id = None
+
+                # Try extract PK
+                if primary_key and primary_key in row and row[primary_key] is not None:
+                    event_id = str(row[primary_key])
+                else:
+                    event_id = f"type_{idx}"
+
+                rows.append((
+                    event_id,
+                    row.to_dict()
+                ))
                 table_name=table_name,
                 primary_key=primary_key,
                 batch_id=batch_id,
