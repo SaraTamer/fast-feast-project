@@ -39,8 +39,8 @@ class WarehouseManager:
         except Exception as e:
             self.logger.log_err(f"Error checking warehouse state: {e}")
             # Try to resume anyway
-            # cursor.execute(f"ALTER WAREHOUSE {warehouse_upper} RESUME")
-            # cursor.execute(f"ALTER COMPUTE POOL {self.compute_pool_name} RESUME")
+            cursor.execute(f"ALTER WAREHOUSE {warehouse_upper} RESUME")
+            cursor.execute(f"ALTER COMPUTE POOL {self.compute_pool_name} RESUME")
             time.sleep(2)
             self.was_suspended = True
         finally:
@@ -52,8 +52,8 @@ class WarehouseManager:
             cursor = self.conn.cursor()
             try:
                 self.logger.log_msg(f"Suspending warehouse {self.warehouse_name}...")
-                # cursor.execute(f"ALTER WAREHOUSE {self.warehouse_name} SUSPEND")
-                # cursor.execute(f"ALTER COMPUTE POOL {self.compute_pool_name} SUSPEND")
+                cursor.execute(f"ALTER WAREHOUSE {self.warehouse_name} SUSPEND")
+                cursor.execute(f"ALTER COMPUTE POOL {self.compute_pool_name} SUSPEND")
                 self.logger.log_msg(f"Warehouse {self.warehouse_name} suspended")
             finally:
                 cursor.close()
@@ -65,4 +65,5 @@ class WarehouseManager:
             self.resume_if_needed()
             yield
         finally:
+            self.conn.commit()
             self.suspend_if_we_resumed()
