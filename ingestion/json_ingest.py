@@ -9,12 +9,12 @@ class JSONIngest(Ingester):
     def __init__(self, file_path: str):
         self.file_path = file_path
         self.audit_logger = logger.AuditLogger()
-        self.duckdb = DuckDBConnection().conn
+        self.conn = DuckDBConnection().conn
 
     def ingest(self):
         self.audit_logger.log_msg(f"ingesting data from {self.file_path}...")
         try:
-            data = self.duckdb.read_json(self.file_path)
+            data = self.conn.read_json(self.file_path, timestamp_format = '%Y-%m-%d %H:%M:%S')
             if self.empty(data):
                 self.audit_logger.log_warning(f"{self.file_path} is empty")
                 return {'data':data, 'is_empty':True}
