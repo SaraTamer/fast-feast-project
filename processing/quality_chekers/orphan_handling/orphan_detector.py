@@ -29,12 +29,17 @@ class OrphanChecker:
         primary_key = self.schema.get_primary_key(table_name)
 
         all_orphans = []
+        stream_dim = ['orders', 'tickets', 'ticket_events']
 
         for fk in foreign_keys:
 
             fk_column = fk["column"]
             ref = fk["references"]
 
+            if '.' in ref:
+                referenced_table = ref.split('.')[0]
+                if referenced_table in stream_dim:
+                    continue  # Skip this foreign key
             dim_name, dim_column = ref.split(".")
 
             if dim_name not in dims_names:
@@ -79,7 +84,7 @@ class OrphanChecker:
             f"Orphan batch sent to {self.config.get_errors_table_name}"
         )
 
-        self.register.register_orphans(
+        self.register.register_batch(
             table_name,
             primary_key,
             all_orphans

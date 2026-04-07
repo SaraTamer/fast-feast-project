@@ -42,11 +42,10 @@ class StreamPipeline:
                         clean_relation = null_check_result['clean_relation']
                         if null_check_result['metrics']['clean_records_count'] == 0:
                             self.logger.log_warning(f"No clean records for {table_name}. Skipping further processing.")
-
                         self.orphan_checker.detect_orphans(
                             table_name=table_name,
                             fact_df=clean_relation,
-                            dims_names=self.dim_cache,
+                            dims_names=self.dim_cache.get_all_cached_dimensions(),
                             batch_id=batch_id
                         )
                         self.metadata_tracker.log_file_processed(file_path)

@@ -14,6 +14,7 @@ from config.schema_loader import SchemaLoader
 from processing.schema_validator import SchemaValidator
 
 from db.metadata_db import MetadataTracker
+from caching.DimensionCache import DimensionCache
 
 
 class PipelineApp:
@@ -25,7 +26,7 @@ class PipelineApp:
         schema_loader = SchemaLoader(config.schemas_path())
         validator = SchemaValidator(schema_loader)
         metadata = MetadataTracker()
-        self.dim_cache = {}
+        self.dim_cache = DimensionCache()
         self.batch_pipeline = BatchPipeline(
             metadata,
             validator,

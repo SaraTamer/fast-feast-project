@@ -47,6 +47,7 @@ class BatchPipeline:
                         if null_check_result['metrics']['clean_records_count'] == 0:
                             self.logger.log_warning(f"No clean records for {table_name}. Skipping further processing.")
 
+                        self.dim_cache.cache_dimension(table_name, clean_relation)
                         self.metadata_tracker.log_file_processed(file_path)
                     else:
                         print(f"{file_path} failed Schema Validation. Dropping file.")
