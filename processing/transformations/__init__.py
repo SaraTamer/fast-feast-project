@@ -9,18 +9,18 @@ class TransformationOrchestrator:
 
     def __init__(self, duckdb_conn):
         self.masker = PIIMasker()
-        self.enricher = Enricher(duckdb_conn.conn)
-        self.metrics = MetricsEngine(duckdb_conn.conn)
-        self.audit = AuditInjector(duckdb_conn.conn)
+        self.enricher = Enricher(duckdb_conn)
+        self.metrics = MetricsEngine()
+        self.audit = AuditInjector()
 
-    def run_all(self, table_name: str, relation: duckdb.DuckDBPyRelation, batch_id: str) -> duckdb.DuckDBPyRelation:
+    def run_all(self, table_name: str, relation: duckdb.DuckDBPyRelation) -> duckdb.DuckDBPyRelation:
         # Add audit metadata
-        relation = self.audit.transform(relation, batch_id)
+        relation = self.audit.transform(relation)
 
         # Apply PII masking
-        # relation = self.masker.transform(table_name, relation)
+        relation = self.masker.transform(table_name, relation)
 
-        # Enrich with dimension joins
+        # Enrich with dimension joins (Gold Layer preparation)
         relation = self.enricher.transform(table_name, relation)
 
         # Calculate SLAs and KPIs

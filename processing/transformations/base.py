@@ -4,5 +4,5 @@ import duckdb
 class BaseTransformer(ABC):
 
     @abstractmethod
-    def transform(self, relation: duckdb.DuckDBPyRelation, **kwargs) -> duckdb.DuckDBPyRelation:
+    def transform(self, relation: duckdb.DuckDBPyRelation) -> duckdb.DuckDBPyRelation:
         pass
