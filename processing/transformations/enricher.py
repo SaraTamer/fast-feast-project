@@ -1,0 +1,105 @@
+import duckdb
+from .base import BaseTransformer
+
+class Enricher(BaseTransformer):
+    # Handking joins
+
+    def __init__(self, duckdb_conn):
+        self.conn = duckdb_conn
+
+    def transform(self, table_name: str, relation: duckdb.DuckDBPyRelation, **kwargs) -> duckdb.DuckDBPyRelation:
+        # Implementing SQL joins for each table
+        if table_name == 'customers':
+            return self._enrich_customers(relation)
+        elif table_name == 'regions':
+            return self._enrich_regions(relation)
+        elif table_name == 'agents':
+            return self._enrich_agents(relation)
+        elif table_name == 'reasons':
+            return self._enrich_reasons(relation)
+        elif table_name == 'tickets':
+            return self._enrich_tickets(relation)
+        
+        return relation
+
+    def _enrich_tickets(self, relation):
+        # Join tickets with priorities (for SLA minutes) and channels (for names).
+        # We check for both lookups to ensure the join doesn't fail
+        has_priorities = self._check_table_exists('priorities')
+        has_channels = self._check_table_exists('channels')
+        
+        if not has_priorities and not has_channels:
+            return relation
+
+        join_sql = "SELECT t.*"
+        if has_priorities:
+            join_sql += ", p.sla_first_response_min, p.sla_resolution_min"
+        if has_channels:
+            join_sql += ", c.channel_name"
+            
+        join_sql += " FROM relation AS t"
+        if has_priorities:
+            join_sql += " LEFT JOIN priorities AS p ON t.priority_id = p.priority_id"
+        if has_channels:
+            join_sql += " LEFT JOIN channels AS c ON t.channel_id = c.channel_id"
+            
+        return self.conn.sql(join_sql)
+
+    def _enrich_customers(self, relation):
+        if not self._check_table_exists('segments'):
+            return relation
+        
+        return self.conn.sql("""
+            SELECT 
+                c.*, 
+                s.segment_name, 
+                s.discount_pct 
+            FROM relation AS c
+            LEFT JOIN segments AS s ON c.segment_id = s.segment_id
+        """)
+
+    def _enrich_regions(self, relation):
+        if not self._check_table_exists('cities'):
+            return relation
+
+        return self.conn.sql("""
+            SELECT 
+                r.*, 
+                c.city_name, 
+                c.country, 
+                c.timezone
+            FROM relation AS r
+            LEFT JOIN cities AS c ON r.city_id = c.city_id
+        """)
+
+    def _enrich_agents(self, relation):
+        if not self._check_table_exists('teams'):
+            return relation
+
+        return self.conn.sql("""
+            SELECT 
+                a.*, 
+                t.team_name
+            FROM relation AS a
+            LEFT JOIN teams AS t ON a.team_id = t.team_id
+        """)
+
+    def _enrich_reasons(self, relation):
+        if not self._check_table_exists('reason_categories'):
+            return relation
+
+        return self.conn.sql("""
+            SELECT 
+                r.*, 
+                rc.reason_category_name
+            FROM relation AS r
+            LEFT JOIN reason_categories AS rc ON r.reason_category_id = rc.reason_category_id
+        """)
+
+    def _check_table_exists(self, table_name):
+        # checker to check if the table is registered in DuckDB.
+        try:
+            self.conn.table(table_name)
+            return True
+        except:
+            return False
