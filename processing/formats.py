@@ -1,8 +1,5 @@
 import core.logger as logger
 from config.format_pattern import FORMAT_PATTERNS
-from processing.error_batch_writer import ErrorBatchWriter
-import pandas as pd
-from processing.monitoring.metrics_tracker import MetricsTracker
  
  
 class FormatChecker:
@@ -12,10 +9,8 @@ class FormatChecker:
  
     def __init__(self):
         self.audit_logger = logger.AuditLogger()
-        self.error_writer = ErrorBatchWriter()
-        self.metrics_tracker = MetricsTracker()
  
-    def separate(self, relation, columns_meta, table_name=None, batch_id=None, primary_key=None):
+    def separate(self, relation, columns_meta):
 
         format_columns = [
             m for m in columns_meta
@@ -50,66 +45,13 @@ class FormatChecker:
         clean_relation = relation.filter(f"NOT ({any_failure})")
  
         if bad_rows_df is not None and not bad_rows_df.empty:
-            # self.audit_logger.log(
-            #     event="format_check",
-            #     detail={
-            #         "bad_row_count": len(bad_rows_df),
-            #         "checked_columns": [m["column"] for m in format_columns],
-            #     }
-            # )
-
-
-            # Only quarantine if full context is provided
-            if table_name and batch_id and primary_key:
-
-                rows = []
-
-                for _, row in bad_rows_df.iterrows():
-
-                    # ── Build event_id from PK ──
-                    if isinstance(primary_key, list):  # composite PK
-                        if any(pd.isna(row[pk]) for pk in primary_key):
-                            raise ValueError(f"Missing PK in row: {row}")
-
-                        event_id = "_".join(str(row[pk]) for pk in primary_key)
-
-                    else:  # single PK
-                        if pd.isna(row[primary_key]):
-                            raise ValueError(f"Missing PK in row: {row}")
-
-                        event_id = str(row[primary_key])
-
-                    # Optional: make globally unique
-                    event_id = f"{table_name}:{event_id}"
-
-                    # ── Extract failing columns ──
-                    failed_cols = row.get("__failed_format_columns", [])
-                    error_column = ", ".join(failed_cols) if failed_cols else "unknown"
-
-                    rows.append((
-                        event_id,
-                        row.to_dict()
-                    ))
-
-                try:
-                    self.error_writer.write_batch(
-                        table_name=table_name,
-                        batch_id=batch_id,
-                        rows=rows,
-                        error_type="FORMAT_ERROR",
-                        error_column=error_column,
-                        fk_table=None,
-                        is_retryable=True
-                    )
-
-                    self.audit_logger.log_msg(
-                        f"Quarantined {len(rows)} FORMAT_ERROR rows for {table_name} (batch={batch_id})"
-                    )
-                    # Add metrics_tracker parameter and update quarantined count
-                    if self.metrics_tracker:
-                        self.metrics_tracker.update_quarantined(len(bad_rows_df))
-                except Exception as e:
-                    self.audit_logger.log_err(f"Failed to quarantine format errors: {e}")
+            self.audit_logger.log(
+                event="format_check",
+                detail={
+                    "bad_row_count": len(bad_rows_df),
+                    "checked_columns": [m["column"] for m in format_columns],
+                }
+            )
  
         return clean_relation, bad_rows_df
     
