@@ -8,6 +8,7 @@ class DimensionCache:
         self.duck = DuckDBConnection().conn
         self.cached_dimensions = set()
         self.logger = AuditLogger()
+        self.schema_loader = SchemaLoader('config/schema.yaml')
 
     def cache_dimension(self, table_name, relation):
         try:
@@ -35,3 +36,7 @@ class DimensionCache:
     def get_all_cached_dimensions(self) -> list:
         """Get list of all cached dimension names."""
         return list(self.cached_dimensions)
+
+    def get_join_key(self, table_name: str):
+        """Get the primary key (join key) for a table."""
+        return self.schema_loader.get_primary_key(table_name)

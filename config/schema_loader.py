@@ -16,3 +16,13 @@ class SchemaLoader:
 
     def get_primary_key(self, table_name: str):
         return self.schemas.get(table_name, {}).get('primary_key', {})
+
+    def get_fact_table_names(self):
+        fact_tables = []
+        for table_name, schema in self.schemas.items():
+            pk_col = schema.get('primary_key')
+            if pk_col:
+                pk_type = schema.get('types', {}).get(pk_col)
+                if pk_type == 'string':
+                    fact_tables.append(table_name)
+        return fact_tables

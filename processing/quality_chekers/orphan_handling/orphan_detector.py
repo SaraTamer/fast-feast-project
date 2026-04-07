@@ -58,6 +58,15 @@ class OrphanChecker:
                 continue
             
             self.logger.log_warning(f"{len(rows)} orphans detected in {table_name} referencing {dim_name}")
+            
+            # Get column names to find fk_column index
+            result = self.duckdb.execute(f"SELECT * FROM fact_table LIMIT 1")
+            column_names = [desc[0] for desc in result.description]
+            fk_col_index = column_names.index(fk_column) if fk_column in column_names else 0
+            
+            for r in rows:
+                fk_value = r[fk_col_index]
+                all_orphans.append((r, fk_column, fk_value, dim_name))
 
             self.writer.write_batch(
                 table_name=table_name,
@@ -68,12 +77,6 @@ class OrphanChecker:
                 fk_table=dim_name,
                 is_retryable=True
             )
-
-
-            
-            for r in rows:
-                all_orphans.append((r, fk_column, dim_name))
-
 
         if not all_orphans:
             self.logger.log_msg(f"No orphans detected in {table_name}")
