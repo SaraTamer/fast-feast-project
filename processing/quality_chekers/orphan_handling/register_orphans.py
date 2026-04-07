@@ -8,18 +8,14 @@ from db.warehouse_manager import WarehouseManager
 
 class OrphansRegistrar:
 
-    def __init__(self, stage="@reconciliation_table"):
+    def __init__(self):
         self.duckdb = DuckDBConnection()
         self.logger = AuditLogger()
         self.config = Config()
 
         self.snow = SnowflakeConnection().conn
-        self.stage = stage
         self.warehouse_manager = WarehouseManager(self.snow, "COMPUTE_WH")
 
-        # Create temp directory (Windows compatible)
-
-        # Create temp directory (Windows compatible)
         self.max_retries = self.config.load_the_yaml()['rules']['max_retries']
 
     def register_batch(self, table_name, event_id, rows):
