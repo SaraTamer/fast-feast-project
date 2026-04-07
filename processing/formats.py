@@ -1,6 +1,7 @@
 import core.logger as logger
 from config.format_pattern import FORMAT_PATTERNS
 from processing.error_batch_writer import ErrorBatchWriter
+import pandas as pd
  
  
 class FormatChecker:
