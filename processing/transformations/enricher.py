@@ -17,8 +17,33 @@ class Enricher(BaseTransformer):
             return self._enrich_agents(relation)
         elif table_name == 'reasons':
             return self._enrich_reasons(relation)
+        elif table_name == 'tickets':
+            return self._enrich_tickets(relation)
         
         return relation
+
+    def _enrich_tickets(self, relation):
+        # Join tickets with priorities (for SLA minutes) and channels (for names).
+        # We check for both lookups to ensure the join doesn't fail
+        has_priorities = self._check_table_exists('priorities')
+        has_channels = self._check_table_exists('channels')
+        
+        if not has_priorities and not has_channels:
+            return relation
+
+        join_sql = "SELECT t.*"
+        if has_priorities:
+            join_sql += ", p.sla_first_response_min, p.sla_resolution_min"
+        if has_channels:
+            join_sql += ", c.channel_name"
+            
+        join_sql += " FROM relation AS t"
+        if has_priorities:
+            join_sql += " LEFT JOIN priorities AS p ON t.priority_id = p.priority_id"
+        if has_channels:
+            join_sql += " LEFT JOIN channels AS c ON t.channel_id = c.channel_id"
+            
+        return self.conn.sql(join_sql)
 
     def _enrich_customers(self, relation):
         if not self._check_table_exists('segments'):
