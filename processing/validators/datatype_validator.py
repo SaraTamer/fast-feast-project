@@ -62,11 +62,15 @@ class DataTypeValidator(BaseValidator):
                     event_id,
                     row.to_dict()
                 ))
+
+            self.error_writer.write_batch(
                 table_name=table_name,
-                primary_key=primary_key,
                 batch_id=batch_id,
+                rows=rows,
                 error_type="TYPE_MISMATCH",
-                retryable=False,
+                error_column="multiple",
+                fk_table=None,
+                is_retryable=False
             )
 
         # ── Step 4: Check remaining ──
