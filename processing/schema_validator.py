@@ -41,4 +41,4 @@ class SchemaValidator:
         
         # If it survives all 3 workers
         self.audit_logger.log_msg(f"ALL CHECKS PASSED: {table_name} data is pure and ready!")
-        return relation, False
+        return result, self.loader.get_columns_meta(table_name)

@@ -12,6 +12,7 @@ from core.logger import AuditLogger
 from config.config_loader import Config
 from config.schema_loader import SchemaLoader
 from processing.schema_validator import SchemaValidator
+from processing.formats import FormatChecker      
 
 from db.metadata_db import MetadataTracker
 from caching.DimensionCache import DimensionCache
