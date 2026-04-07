@@ -7,11 +7,13 @@ from ingestion.ingester_factory import FactoryIngester
 from db.metadata_db import MetadataTracker
 from config.schema_loader import SchemaLoader
 from processing.schema_validator import SchemaValidator
+from processing.formats import FormatChecker      
 
 class PipelinePhases:
-    def __init__(self, metadata_tracker, validator):
+    def __init__(self, metadata_tracker, validator, format_checker):
         self.metadata_tracker = metadata_tracker
         self.validator = validator
+        self.format_checker   = format_checker
         self.processing_files = set()
         self.lock = threading.Lock()        # thread-safe since you use 2 threads; where we will lock on shared variables when we use them for each thread
 
@@ -20,9 +22,9 @@ class PipelinePhases:
             if file_path in self.processing_files:
                 print(f"Skipping {file_path} (currently being processed)")
                 return
-            if self.metadata_tracker.is_file_processed(file_path):
-                print(f"Skipping {file_path} (already processed)")
-                return
+            # if self.metadata_tracker.is_file_processed(file_path):
+            #     print(f"Skipping {file_path} (already processed)")
+            #     return
             # Mark as in-progress
             self.processing_files.add(file_path)
 
@@ -32,13 +34,21 @@ class PipelinePhases:
             if ingester:
                 relation = ingester.ingest()
                 if relation is not None:
-                    valid_relation, _ = self.validator.validate_schema(file_path, relation)
-                    if valid_relation:
+                    validated_relation, columns_meta = self.validator.validate_schema(file_path, relation)
+                    if validated_relation:
                         print(f"\nData validated, this is a sample:")
-                        print(valid_relation.limit(5))
+                        print(validated_relation.limit(5))
                         self.metadata_tracker.log_file_processed(file_path)
                     else:
                         print(f"{file_path} failed Schema Validation. Dropping file.")
+                        return
+
+                    formatted_relation, bad_rows_df = self.format_checker.separate(
+                        validated_relation, columns_meta
+                    )
+                    print(f"{file_path} failed Schema Validation. Dropping file.")
+
+
         except Exception as e:
             print(f"An error occurred while processing the file: {e}")
         finally:
@@ -95,9 +105,10 @@ class MainApp:
         self.schema_loader = SchemaLoader(self.app_config.schema_path())
         self.metadata_tracker = MetadataTracker()
         self.validator = SchemaValidator(self.schema_loader)
+        self.format_checker  = FormatChecker() 
 
         # Initialize core components
-        self.phases = PipelinePhases(self.metadata_tracker, self.validator)
+        self.phases = PipelinePhases(self.metadata_tracker, self.validator, self.format_checker)
         self.pipeline = Pipeline(self.app_config, self.phases)
 
     def run(self):
