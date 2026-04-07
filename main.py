@@ -26,17 +26,20 @@ class PipelineApp:
         config = Config()
         schema_loader = SchemaLoader(config.schemas_path())
         validator = SchemaValidator(schema_loader)
+        format_checker  = FormatChecker()
         metadata = MetadataTracker()
         self.dim_cache = DimensionCache()
         self.batch_pipeline = BatchPipeline(
             metadata,
             validator,
+            format_checker,
             self.dim_cache
         )
 
         self.stream_pipeline = StreamPipeline(
             metadata,
             validator,
+            format_checker,
             self.dim_cache
         )
 
