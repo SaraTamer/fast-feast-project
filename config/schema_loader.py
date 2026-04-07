@@ -16,3 +16,15 @@ class SchemaLoader:
 
     def get_primary_key(self, table_name: str):
         return self.schemas.get(table_name, {}).get('primary_key', {})
+    
+    def get_columns_meta(self, table_name):
+        table   = self.schemas.get(table_name, {})
+        formats = table.get("formats") or {}
+
+        return [
+            {
+                "column": col,
+                "format": fmt
+            }
+            for col, fmt in formats.items()
+        ]
