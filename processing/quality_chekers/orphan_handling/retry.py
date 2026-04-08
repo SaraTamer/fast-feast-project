@@ -80,7 +80,7 @@ class RetryService:
                         now = datetime.utcnow()
                         time_since_update = (now - updated_at).total_seconds() if updated_at else float('inf')
                         
-                        if time_since_update > 10:  # Only increment if not updated in last 10 seconds
+                        if time_since_update > 2000:  # Only increment if not updated in last 10 seconds
                             retry_count += 1
                             status = "RETRYING"
                             if retry_count >= self.config.max_retries():
