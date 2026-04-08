@@ -1,4 +1,3 @@
-from time import sleep
 from core.logger import AuditLogger
 from config.required_cols_loader import RequiredColsLoader
 from config.schema_loader import SchemaLoader
@@ -9,7 +8,7 @@ from .register_orphans import OrphansRegistrar
 
 class OrphanChecker:
 
-    def __init__(self, duckdb_conn):
+    def __init__(self, duckdb_conn, metrics_tracker=None):
 
         self.duckdb = duckdb_conn.conn
         self.logger = AuditLogger()
@@ -19,7 +18,7 @@ class OrphanChecker:
 
         self.writer = ErrorBatchWriter()
         self.register = OrphansRegistrar(duckdb_conn)
-
+        self.metrics_tracker = metrics_tracker  # Add metrics tracker
 
     def detect_orphans(self, table_name, fact_df, dims_names, batch_id):
 
@@ -33,6 +32,12 @@ class OrphanChecker:
         # Start with all records
         clean_relation = fact_df
         self.duckdb.register("clean_table", clean_relation)
+
+        # ✅ Get total records count before processing
+        try:
+            total_records = clean_relation.count() if hasattr(clean_relation, 'count') else len(clean_relation.df())
+        except:
+            total_records = 0
 
         for fk in foreign_keys:
 
@@ -96,12 +101,21 @@ class OrphanChecker:
                 clean_relation = self.duckdb.table("result_table")
 
                 self.logger.log_msg(
-                    f"Removed {len(orphan_ids)} orphan records, {clean_relation.count()} records remain")
+                    f"Removed {len(orphan_ids)} orphan records")
+
+        total_orphans = len(all_orphans)
 
         # Register orphans for retry
         if all_orphans:
             self.logger.log_msg(f"Orphan batch sent to {self.config.get_errors_table_name}")
             self.register.register_batch(table_name, primary_key, all_orphans)
+
+            # ✅ Update metrics tracker
+            if self.metrics_tracker:
+                self.metrics_tracker.update_orphans(total_orphans)
+                # Calculate referential integrity rate
+                valid_records = total_records - total_orphans
+                self.metrics_tracker.update_referential_integrity(table_name, total_records, valid_records)
         else:
             self.logger.log_msg(f"No orphans detected in {table_name}")
 

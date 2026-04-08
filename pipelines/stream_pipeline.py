@@ -33,6 +33,7 @@ class StreamPipeline:
         ingester = FactoryIngester(file_path, self.duck_db_connection).get_reader()
         batch_id = str(uuid.uuid4())
         table_name = get_table_name(file_path)
+        self.metrics_tracker.start_batch(batch_id, table_name)
 
         if self.metadata_tracker.is_file_processed(file_path):
             self.logger.log_msg(f"Skipping {file_path} (already processed)")
@@ -113,7 +114,7 @@ class StreamPipeline:
                         self.logger.log_msg(f"After duplicate removal: {len(unique_df)} unique rows")
 
                         self.metadata_tracker.log_file_processed(file_path)
-
+                        self.metrics_tracker.increment_files_processed()
                         # ✅ Create a fresh relation for transformation
                         fresh_relation = self.duck_db_connection.conn.from_df(unique_df)
 
@@ -130,4 +131,12 @@ class StreamPipeline:
                     else:
                         print(f"{file_path} failed Schema Validation. Dropping file.")
         except Exception as e:
+            self.metrics_tracker.increment_files_failed()
             self.logger.log_err(f"An error occurred while processing the file: {e}")
+        finally:
+            # End timing
+            self.metrics_tracker.end_batch(batch_id, table_name, file_path)
+
+            # Save metrics to Snowflake periodically
+            if self.metrics_tracker.files_processed % 10 == 0:
+                self.metrics_tracker.save_to_snowflake(batch_id)

@@ -2,6 +2,7 @@ import core.logger as logger
 from config.format_pattern import FORMAT_PATTERNS
 from processing.error_batch_writer import ErrorBatchWriter
 import pandas as pd
+from processing.monitoring.metrics_tracker import MetricsTracker
  
  
 class FormatChecker:
@@ -12,6 +13,7 @@ class FormatChecker:
     def __init__(self):
         self.audit_logger = logger.AuditLogger()
         self.error_writer = ErrorBatchWriter()
+        self.metrics_tracker = MetricsTracker()
  
     def separate(self, relation, columns_meta, table_name=None, batch_id=None, primary_key=None):
 
@@ -48,13 +50,13 @@ class FormatChecker:
         clean_relation = relation.filter(f"NOT ({any_failure})")
  
         if bad_rows_df is not None and not bad_rows_df.empty:
-            self.audit_logger.log(
-                event="format_check",
-                detail={
-                    "bad_row_count": len(bad_rows_df),
-                    "checked_columns": [m["column"] for m in format_columns],
-                }
-            )
+            # self.audit_logger.log(
+            #     event="format_check",
+            #     detail={
+            #         "bad_row_count": len(bad_rows_df),
+            #         "checked_columns": [m["column"] for m in format_columns],
+            #     }
+            # )
 
 
             # Only quarantine if full context is provided
@@ -103,7 +105,9 @@ class FormatChecker:
                     self.audit_logger.log_msg(
                         f"Quarantined {len(rows)} FORMAT_ERROR rows for {table_name} (batch={batch_id})"
                     )
-
+                    # Add metrics_tracker parameter and update quarantined count
+                    if self.metrics_tracker:
+                        self.metrics_tracker.update_quarantined(len(bad_rows_df))
                 except Exception as e:
                     self.audit_logger.log_err(f"Failed to quarantine format errors: {e}")
  
