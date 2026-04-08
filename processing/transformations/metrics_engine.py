@@ -1,5 +1,6 @@
 import duckdb
 import pandas as pd
+import numpy as np
 from .base import BaseTransformer
 from core.logger import AuditLogger
 
@@ -61,10 +62,15 @@ class MetricsEngine(BaseTransformer):
         # Revenue impact
         df['revenue_impact'] = df['refund_amount'].fillna(0)
 
-        # Date IDs
-        df['created_date_id'] = df['created_at'].dt.strftime('%Y%m%d').astype(int)
-        df['first_response_date_id'] = df['first_response_at'].dt.strftime('%Y%m%d').astype(int)
-        df['resolved_date_id'] = df['resolved_at'].dt.strftime('%Y%m%d').astype(int)
+        # ✅ Date IDs - handle NaN values
+        df['created_date_id'] = df['created_at'].dt.strftime('%Y%m%d')
+        df['created_date_id'] = df['created_date_id'].apply(lambda x: int(x) if pd.notna(x) else None)
+
+        df['first_response_date_id'] = df['first_response_at'].dt.strftime('%Y%m%d')
+        df['first_response_date_id'] = df['first_response_date_id'].apply(lambda x: int(x) if pd.notna(x) else None)
+
+        df['resolved_date_id'] = df['resolved_at'].dt.strftime('%Y%m%d')
+        df['resolved_date_id'] = df['resolved_date_id'].apply(lambda x: int(x) if pd.notna(x) else None)
 
         self.logger.log_msg(f"Transformed {len(df)} tickets")
         return df
@@ -84,10 +90,13 @@ class MetricsEngine(BaseTransformer):
             df.loc[mask, 'delivery_duration_min'] = (df.loc[mask, 'delivered_at'] - df.loc[
                 mask, 'order_created_at']).dt.total_seconds() / 60
 
-        # Date IDs
-        df['order_date_id'] = df['order_created_at'].dt.strftime('%Y%m%d').astype(int)
+        # ✅ Date IDs - handle NaN values
+        df['order_date_id'] = df['order_created_at'].dt.strftime('%Y%m%d')
+        df['order_date_id'] = df['order_date_id'].apply(lambda x: int(x) if pd.notna(x) else None)
+
         if 'delivered_at' in df.columns:
-            df['delivered_date_id'] = df['delivered_at'].dt.strftime('%Y%m%d').astype(int)
+            df['delivered_date_id'] = df['delivered_at'].dt.strftime('%Y%m%d')
+            df['delivered_date_id'] = df['delivered_date_id'].apply(lambda x: int(x) if pd.notna(x) else None)
 
         self.logger.log_msg(f"Transformed {len(df)} orders")
         return df
