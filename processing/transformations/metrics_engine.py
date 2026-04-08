@@ -1,81 +1,102 @@
 import duckdb
+import pandas as pd
+import numpy as np
 from .base import BaseTransformer
+from core.logger import AuditLogger
+
 
 class MetricsEngine(BaseTransformer):
 
-    def __init__(self):
+    def __init__(self, duckdb):
         self.sla_first_min = 1
         self.sla_resolve_min = 15
+        self.logger = AuditLogger()
+        self.duckdb = duckdb
 
     def transform(self, table_name: str, relation: duckdb.DuckDBPyRelation, **kwargs) -> duckdb.DuckDBPyRelation:
-        # Add universal Date IDs for the Gold layer
-        relation = self._add_date_ids(table_name, relation)
+        """Add metrics calculations to the relation."""
+        if relation is None:
+            return None
 
-        # Add business calculations
+        self.logger.log_msg(f"Calculating metrics for {table_name}")
+
+        # Convert to DataFrame
+        df = relation.df()
+
+        if len(df) == 0:
+            self.logger.log_warning(f"Empty relation for {table_name}")
+            return relation
+
         if table_name == 'orders':
-            return self._transform_orders(relation)
+            df = self._transform_orders(df)
         elif table_name == 'tickets':
-            return self._transform_tickets(relation)
-        
-        return relation
+            df = self._transform_tickets(df)
+        else:
+            return relation
 
-    def _transform_tickets(self, relation):
-        # Calculate SLA latency, breach flags, and revenue impact.
-        # Check if we have SLA limit columns from the Enricher, else fallback
-        return relation.project("""
-            *,
-            -- Latency in minutes
-            (epoch(first_response_at) - epoch(created_at)) / 60 as first_response_min,
-            (epoch(resolved_at) - epoch(created_at)) / 60 as resolution_min,
-            
-            -- SLA breach flags (using dynamic limits if they were joined)
-            CASE 
-                WHEN (epoch(first_response_at) - epoch(created_at)) / 60 > coalesce(sla_first_response_min, 1) THEN TRUE 
-                ELSE FALSE 
-            END as is_sla_first_breached,
-            
-            CASE 
-                WHEN (epoch(resolved_at) - epoch(created_at)) / 60 > coalesce(sla_resolution_min, 15) THEN TRUE 
-                ELSE FALSE 
-            END as is_sla_resolution_breached,
-            
-            -- Reopen Rate flag
-            CASE WHEN status = 'Reopened' THEN TRUE ELSE FALSE END as is_reopened,
-            
-            -- Revenue Impact
-            coalesce(refund_amount, 0) as revenue_impact
-        """)
+        # Convert back to DuckDB relation
+        return self.duckdb.from_df(df)
 
-    def _transform_orders(self, relation):
-        # Calculate net revenue and delivery durations.
-        return relation.project("""
-            *,
-            -- Net Revenue calculation
-            (order_amount + delivery_fee - discount_amount) as net_revenue,
-            
-            -- Delivery duration (if delivered_at is not null)
-            CASE 
-                WHEN delivered_at IS NOT NULL THEN (epoch(delivered_at) - epoch(order_created_at)) / 60 
-                ELSE NULL 
-            END as delivery_duration_min
-        """)
+    def _transform_tickets(self, df):
+        """Transform tickets using pandas."""
+        # Convert to datetime
+        df['created_at'] = pd.to_datetime(df['created_at'])
+        df['first_response_at'] = pd.to_datetime(df['first_response_at'])
+        df['resolved_at'] = pd.to_datetime(df['resolved_at'])
 
-    def _add_date_ids(self, table_name, relation):
-        # Convert timestamps to YYYYMMDD integer surrogate keys for DimDate.
-        cols = relation.columns
-        transform_sql = "SELECT *"
-        
-        # Mapping timestamps to target Date IDs
-        date_mapping = {
-            "order_created_at": "order_date_id",
-            "delivered_at": "delivered_date_id",
-            "created_at": "created_date_id",
-            "first_response_at": "first_response_date_id",
-            "resolved_at": "resolved_date_id"
-        }
-        
-        for ts_col, id_col in date_mapping.items():
-            if ts_col in cols:
-                transform_sql += f", CAST(strftime({ts_col}, '%Y%m%d') AS INTEGER) AS {id_col}"
-        
-        return relation.query("temp_date", transform_sql)
+        # Calculate latency in minutes
+        df['first_response_min'] = (df['first_response_at'] - df['created_at']).dt.total_seconds() / 60
+        df['resolution_min'] = (df['resolved_at'] - df['created_at']).dt.total_seconds() / 60
+
+        # Get SLA values (if they exist from join, otherwise use defaults)
+        sla_first = df.get('sla_first_response_min', self.sla_first_min)
+        sla_resolve = df.get('sla_resolution_min', self.sla_resolve_min)
+
+        # Calculate SLA breach flags
+        df['is_sla_first_breached'] = df['first_response_min'] > sla_first
+        df['is_sla_resolution_breached'] = df['resolution_min'] > sla_resolve
+
+        # Reopen flag
+        df['is_reopened'] = df['status'] == 'Reopened'
+
+        # Revenue impact
+        df['revenue_impact'] = df['refund_amount'].fillna(0)
+
+        # ✅ Date IDs - handle NaN values
+        df['created_date_id'] = df['created_at'].dt.strftime('%Y%m%d')
+        df['created_date_id'] = df['created_date_id'].apply(lambda x: int(x) if pd.notna(x) else None)
+
+        df['first_response_date_id'] = df['first_response_at'].dt.strftime('%Y%m%d')
+        df['first_response_date_id'] = df['first_response_date_id'].apply(lambda x: int(x) if pd.notna(x) else None)
+
+        df['resolved_date_id'] = df['resolved_at'].dt.strftime('%Y%m%d')
+        df['resolved_date_id'] = df['resolved_date_id'].apply(lambda x: int(x) if pd.notna(x) else None)
+
+        self.logger.log_msg(f"Transformed {len(df)} tickets")
+        return df
+
+    def _transform_orders(self, df):
+        """Transform orders using pandas."""
+        # Convert to datetime
+        df['order_created_at'] = pd.to_datetime(df['order_created_at'])
+
+        # Net revenue
+        df['net_revenue'] = df['order_amount'] + df['delivery_fee'] - df['discount_amount']
+
+        # Delivery duration
+        if 'delivered_at' in df.columns:
+            df['delivered_at'] = pd.to_datetime(df['delivered_at'])
+            mask = df['delivered_at'].notna()
+            df.loc[mask, 'delivery_duration_min'] = (df.loc[mask, 'delivered_at'] - df.loc[
+                mask, 'order_created_at']).dt.total_seconds() / 60
+
+        # ✅ Date IDs - handle NaN values
+        df['order_date_id'] = df['order_created_at'].dt.strftime('%Y%m%d')
+        df['order_date_id'] = df['order_date_id'].apply(lambda x: int(x) if pd.notna(x) else None)
+
+        if 'delivered_at' in df.columns:
+            df['delivered_date_id'] = df['delivered_at'].dt.strftime('%Y%m%d')
+            df['delivered_date_id'] = df['delivered_date_id'].apply(lambda x: int(x) if pd.notna(x) else None)
+
+        self.logger.log_msg(f"Transformed {len(df)} orders")
+        return df
