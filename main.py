@@ -12,6 +12,7 @@ from core.logger import AuditLogger
 from config.config_loader import Config
 from config.schema_loader import SchemaLoader
 from processing.schema_validator import SchemaValidator
+from processing.formats import FormatChecker      
 
 from db.metadata_db import MetadataTracker
 from caching.DimensionCache import DimensionCache
@@ -25,17 +26,20 @@ class PipelineApp:
         config = Config()
         schema_loader = SchemaLoader(config.schemas_path())
         validator = SchemaValidator(schema_loader)
+        format_checker  = FormatChecker()
         metadata = MetadataTracker()
         self.dim_cache = DimensionCache()
         self.batch_pipeline = BatchPipeline(
             metadata,
             validator,
+            format_checker,
             self.dim_cache
         )
 
         self.stream_pipeline = StreamPipeline(
             metadata,
             validator,
+            format_checker,
             self.dim_cache
         )
 

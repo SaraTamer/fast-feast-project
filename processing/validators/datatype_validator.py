@@ -4,15 +4,15 @@ from processing.validators.base_validator import BaseValidator
 from config.schema_loader import SchemaLoader
 from config.type_mapping import duckdb_type_to_yaml
 from db.RowSeparator import RowSeparator
-from db.QuarantineWriter import QuarantineWriter
+from processing.error_batch_writer import ErrorBatchWriter
 
 
 class DataTypeValidator(BaseValidator):
-    def __init__(self, loader: SchemaLoader, quarantine_writer: QuarantineWriter = None):
+    def __init__(self, loader: SchemaLoader):
         self.loader = loader
         self.audit_logger = logger.AuditLogger()
         self.separator = RowSeparator()
-        self.quarantine = quarantine_writer or QuarantineWriter()
+        self.error_writer = ErrorBatchWriter()
 
     def validate(self, relation: duckdb.DuckDBPyRelation, table_name: str,
                  batch_id: str = None):
@@ -47,13 +47,30 @@ class DataTypeValidator(BaseValidator):
 
         # ── Step 3: Quarantine bad rows ──
         if bad_rows_df is not None and len(bad_rows_df) > 0:
-            self.quarantine.quarantine(
-                bad_rows_df=bad_rows_df,
+            rows = []
+
+            for idx, row in bad_rows_df.iterrows():
+                event_id = None
+
+                # Try extract PK
+                if primary_key and primary_key in row and row[primary_key] is not None:
+                    event_id = str(row[primary_key])
+                else:
+                    event_id = f"type_{idx}"
+
+                rows.append((
+                    event_id,
+                    row.to_dict()
+                ))
+
+            self.error_writer.write_batch(
                 table_name=table_name,
-                primary_key=primary_key,
                 batch_id=batch_id,
+                rows=rows,
                 error_type="TYPE_MISMATCH",
-                retryable=False,
+                error_column="multiple",
+                fk_table=None,
+                is_retryable=False
             )
 
         # ── Step 4: Check remaining ──

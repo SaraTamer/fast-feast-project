@@ -26,3 +26,15 @@ class SchemaLoader:
                 if pk_type == 'string':
                     fact_tables.append(table_name)
         return fact_tables
+    
+    def get_columns_meta(self, table_name):
+        table   = self.schemas.get(table_name, {})
+        formats = table.get("formats") or {}
+
+        return [
+            {
+                "column": col,
+                "format": fmt
+            }
+            for col, fmt in formats.items()
+        ]

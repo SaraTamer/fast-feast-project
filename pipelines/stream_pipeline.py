@@ -9,10 +9,11 @@ from utils.utils import get_table_name
 
 class StreamPipeline:
 
-    def __init__(self, metadata_tracker, validator, dim_cache):
+    def __init__(self, metadata_tracker, validator, format_checker, dim_cache):
 
         self.logger = AuditLogger()
         self.validator = validator
+        self.format_checker = format_checker
         self.dim_cache = dim_cache
         self.metrics_tracker = MetricsTracker()
         self.orphan_checker = OrphanChecker()
@@ -28,13 +29,33 @@ class StreamPipeline:
             if ingester:
                 relation = ingester.ingest()
                 if relation['data'] is not None and not relation['is_empty']:
-                    valid_relation, _ = self.validator.validate_schema(file_path, relation['data'])
-                    if valid_relation:
+                    validated_relation, columns_meta = self.validator.validate_schema(file_path, relation['data'])
+                    if validated_relation:
                         print(f"\nData validated, this is a sample:")
-                        print(valid_relation.limit(5))
+                        print(validated_relation.limit(5))
+
+                        formatted_relation, bad_rows_df = self.format_checker.separate(
+                            validated_relation,
+                            columns_meta,
+                            table_name=table_name,
+                            batch_id=batch_id,
+                            primary_key=self.validator.loader.get_primary_key(table_name)
+                        )
+
+                        bad_count = 0 if bad_rows_df is None else len(bad_rows_df)
+
+                        if bad_count > 0:
+                            self.logger.log_warning(
+                                f"[FORMAT CHECK] {bad_count} invalid rows detected in {table_name} | batch_id={batch_id}"
+                            )
+                        else:
+                            self.logger.log_msg(
+                                f"[FORMAT CHECK] No format issues detected in {table_name} | batch_id={batch_id}"
+                            )
+
 
                         null_check_result = self.null_checker.check_null_values(
-                            relation=valid_relation,
+                            relation=formatted_relation,
                             file_path=file_path,
                             table_name=table_name,
                             batch_id=batch_id,
