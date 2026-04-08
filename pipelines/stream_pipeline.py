@@ -29,8 +29,13 @@ class StreamPipeline:
         ingester = FactoryIngester(file_path, self.duck_db_connection).get_reader()
         batch_id = str(uuid.uuid4())
         table_name = get_table_name(file_path)
+        if self.metadata_tracker.is_file_processed(file_path):
+            self.logger.log_msg(f"Skipping {file_path} (already processed)")
+            return
+
         try:
             if ingester:
+
                 relation = ingester.ingest()
                 if relation['data'] is not None and not relation['is_empty']:
                     validated_relation, columns_meta = self.validator.validate_schema(file_path, relation['data'])

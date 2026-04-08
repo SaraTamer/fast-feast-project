@@ -1,4 +1,5 @@
 import duckdb
+import pandas as pd
 from .base import BaseTransformer
 from core.logger import AuditLogger
 
@@ -18,83 +19,75 @@ class MetricsEngine(BaseTransformer):
 
         self.logger.log_msg(f"Calculating metrics for {table_name}")
 
-        # Convert to DataFrame first to avoid connection issues
+        # Convert to DataFrame
         df = relation.df()
 
-        # Register as temp table in the connection
-        temp_table = f"_temp_metrics_{table_name}"
-        duckdb.register(temp_table,df)
+        if len(df) == 0:
+            self.logger.log_warning(f"Empty relation for {table_name}")
+            return relation
 
-        try:
-            if table_name == 'orders':
-                result = self._transform_orders_sql(temp_table, duckdb)
-            elif table_name == 'tickets':
-                result = self._transform_tickets_sql(temp_table, duckdb)
-            else:
-                result = relation
+        if table_name == 'orders':
+            df = self._transform_orders(df)
+        elif table_name == 'tickets':
+            df = self._transform_tickets(df)
+        else:
+            return relation
 
-            return result
-        finally:
-            try:
-                duckdb.unregister(temp_table)
-            except:
-                pass
+        # Convert back to DuckDB relation
+        return self.duckdb.from_df(df)
 
-    def _transform_tickets_sql(self, temp_table, conn):
-        """Transform tickets using SQL."""
-        sql = f"""
-            SELECT 
-                *,
-                -- Latency in minutes
-                (epoch(first_response_at) - epoch(created_at)) / 60 as first_response_min,
-                (epoch(resolved_at) - epoch(created_at)) / 60 as resolution_min,
+    def _transform_tickets(self, df):
+        """Transform tickets using pandas."""
+        # Convert to datetime
+        df['created_at'] = pd.to_datetime(df['created_at'])
+        df['first_response_at'] = pd.to_datetime(df['first_response_at'])
+        df['resolved_at'] = pd.to_datetime(df['resolved_at'])
 
-                -- SLA breach flags
-                CASE 
-                    WHEN (epoch(first_response_at) - epoch(created_at)) / 60 > COALESCE(sla_first_response_min, 1) THEN TRUE 
-                    ELSE FALSE 
-                END as is_sla_first_breached,
+        # Calculate latency in minutes
+        df['first_response_min'] = (df['first_response_at'] - df['created_at']).dt.total_seconds() / 60
+        df['resolution_min'] = (df['resolved_at'] - df['created_at']).dt.total_seconds() / 60
 
-                CASE 
-                    WHEN (epoch(resolved_at) - epoch(created_at)) / 60 > COALESCE(sla_resolution_min, 15) THEN TRUE 
-                    ELSE FALSE 
-                END as is_sla_resolution_breached,
+        # Get SLA values (if they exist from join, otherwise use defaults)
+        sla_first = df.get('sla_first_response_min', self.sla_first_min)
+        sla_resolve = df.get('sla_resolution_min', self.sla_resolve_min)
 
-                -- Reopen Rate flag
-                CASE WHEN status = 'Reopened' THEN TRUE ELSE FALSE END as is_reopened,
+        # Calculate SLA breach flags
+        df['is_sla_first_breached'] = df['first_response_min'] > sla_first
+        df['is_sla_resolution_breached'] = df['resolution_min'] > sla_resolve
 
-                -- Revenue Impact
-                COALESCE(refund_amount, 0) as revenue_impact,
+        # Reopen flag
+        df['is_reopened'] = df['status'] == 'Reopened'
 
-                -- Date IDs
-                CAST(strftime(created_at, '%Y%m%d') AS INTEGER) as created_date_id,
-                CAST(strftime(first_response_at, '%Y%m%d') AS INTEGER) as first_response_date_id,
-                CAST(strftime(resolved_at, '%Y%m%d') AS INTEGER) as resolved_date_id
-            FROM {temp_table}
-        """
+        # Revenue impact
+        df['revenue_impact'] = df['refund_amount'].fillna(0)
 
-        result_df = conn.execute(sql).fetchdf()
-        return conn.from_df(result_df)
+        # Date IDs
+        df['created_date_id'] = df['created_at'].dt.strftime('%Y%m%d').astype(int)
+        df['first_response_date_id'] = df['first_response_at'].dt.strftime('%Y%m%d').astype(int)
+        df['resolved_date_id'] = df['resolved_at'].dt.strftime('%Y%m%d').astype(int)
 
-    def _transform_orders_sql(self, temp_table, conn):
-        """Transform orders using SQL."""
-        sql = f"""
-            SELECT 
-                *,
-                -- Net Revenue calculation
-                (order_amount + delivery_fee - discount_amount) as net_revenue,
+        self.logger.log_msg(f"Transformed {len(df)} tickets")
+        return df
 
-                -- Delivery duration
-                CASE 
-                    WHEN delivered_at IS NOT NULL THEN (epoch(delivered_at) - epoch(order_created_at)) / 60 
-                    ELSE NULL 
-                END as delivery_duration_min,
+    def _transform_orders(self, df):
+        """Transform orders using pandas."""
+        # Convert to datetime
+        df['order_created_at'] = pd.to_datetime(df['order_created_at'])
 
-                -- Date IDs
-                CAST(strftime(order_created_at, '%Y%m%d') AS INTEGER) as order_date_id,
-                CAST(strftime(delivered_at, '%Y%m%d') AS INTEGER) as delivered_date_id
-            FROM {temp_table}
-        """
+        # Net revenue
+        df['net_revenue'] = df['order_amount'] + df['delivery_fee'] - df['discount_amount']
 
-        result_df = conn.execute(sql).fetchdf()
-        return conn.from_df(result_df)
+        # Delivery duration
+        if 'delivered_at' in df.columns:
+            df['delivered_at'] = pd.to_datetime(df['delivered_at'])
+            mask = df['delivered_at'].notna()
+            df.loc[mask, 'delivery_duration_min'] = (df.loc[mask, 'delivered_at'] - df.loc[
+                mask, 'order_created_at']).dt.total_seconds() / 60
+
+        # Date IDs
+        df['order_date_id'] = df['order_created_at'].dt.strftime('%Y%m%d').astype(int)
+        if 'delivered_at' in df.columns:
+            df['delivered_date_id'] = df['delivered_at'].dt.strftime('%Y%m%d').astype(int)
+
+        self.logger.log_msg(f"Transformed {len(df)} orders")
+        return df
