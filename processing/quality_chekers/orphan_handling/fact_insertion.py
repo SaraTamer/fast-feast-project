@@ -7,7 +7,7 @@ class FactReplayService:
 
     def __init__(self):
 
-        self.snow = SnowflakeConnection()
+        self.snow = SnowflakeConnection().conn
         self.logger = Logger()
 
 

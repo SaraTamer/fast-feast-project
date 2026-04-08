@@ -62,7 +62,6 @@ class BatchPipeline:
                             self.logger.log_msg(f"Calling retry service for dim={table_name}, fact_table={fact_table}")
                             self.retry_service.retry(
                                 dim_name=table_name,
-                                join_key=self.dim_cache.get_join_key(table_name),
                                 table_name=fact_table
                             )
                             self.logger.log_msg(f"Completed retry service for dim={table_name}, fact_table={fact_table}")

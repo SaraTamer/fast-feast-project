@@ -15,7 +15,7 @@ class DimensionCache:
             # Register the relation in DuckDB
             self.duck.register(table_name, relation)
             self.cached_dimensions.add(table_name)
-
+            self.logger.log_msg(f"Cached dimension '{table_name}' successfully")
         except Exception as e:
             self.logger.log_err(f"Failed to cache dimension '{table_name}': {str(e)}")
             raise
