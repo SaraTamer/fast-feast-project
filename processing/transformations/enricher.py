@@ -39,7 +39,6 @@ class Enricher(BaseTransformer):
                 result = self._enrich_tickets(temp_name)
             else:
                 self.logger.log_msg(f"No enrichment defined for {table_name}, returning original")
-                # Convert to DataFrame to avoid temp table dependency
                 df = self.conn.table(temp_name).df()
                 result = self.conn.from_df(df)
 
@@ -48,19 +47,37 @@ class Enricher(BaseTransformer):
 
         except Exception as e:
             self.logger.log_err(f"Failed to enrich {table_name}: {e}")
-            # Fallback: return as DataFrame to break connection dependency
             try:
                 df = self.conn.table(temp_name).df()
                 return self.conn.from_df(df)
             except:
                 return relation
         finally:
-            # Clean up - but only after we've converted to DataFrame
             try:
                 self.conn.unregister(temp_name)
                 self.logger.log_msg(f"Unregistered {temp_name}")
             except Exception as e:
                 self.logger.log_warning(f"Failed to unregister {temp_name}: {e}")
+
+    def _check_table_exists(self, table_name):
+        """Check if a table is registered in DuckDB (silent fail)."""
+        try:
+            self.conn.table(table_name)
+            return True
+        except Exception:
+            # Silently return False without logging warning
+            return False
+
+    def _check_table_exists_with_log(self, table_name):
+        """Check if a table exists with debug logging (only in debug mode)."""
+        try:
+            self.conn.table(table_name)
+            self.logger.log_msg(f"Table {table_name} exists")
+            return True
+        except Exception:
+            # Log at debug level instead of warning
+            self.logger.log_msg(f"Table {table_name} not found, skipping enrichment")
+            return False
 
     def _enrich_tickets(self, temp_name):
         """Join tickets with priorities and channels."""
@@ -71,7 +88,6 @@ class Enricher(BaseTransformer):
 
         if not has_priorities and not has_channels:
             self.logger.log_msg("No enrichment tables available for tickets")
-            # Return as DataFrame to avoid temp table dependency
             df = self.conn.table(temp_name).df()
             return self.conn.from_df(df)
 
@@ -91,7 +107,6 @@ class Enricher(BaseTransformer):
         full_sql = f"SELECT {', '.join(select_parts)} {from_clause}"
         self.logger.log_msg(f"Executing SQL: {full_sql[:200]}...")
 
-        # Execute and return as DataFrame then back to relation
         df = self.conn.execute(full_sql).fetchdf()
         self.logger.log_msg(f"Enriched tickets, got {len(df)} rows")
 
@@ -151,8 +166,8 @@ class Enricher(BaseTransformer):
         self.logger.log_msg(f"Enriching agents using {temp_name}")
 
         if not self._check_table_exists('teams'):
+            # Log at info level instead of warning
             self.logger.log_msg("Teams table not found, returning original")
-            # ✅ Return as DataFrame to break dependency on temp table
             df = self.conn.table(temp_name).df()
             return self.conn.from_df(df)
 
@@ -171,7 +186,6 @@ class Enricher(BaseTransformer):
             return self.conn.from_df(df)
         except Exception as e:
             self.logger.log_err(f"Failed to enrich agents: {e}")
-            # Fallback: return original as DataFrame
             df = self.conn.table(temp_name).df()
             return self.conn.from_df(df)
 
@@ -180,6 +194,7 @@ class Enricher(BaseTransformer):
         self.logger.log_msg(f"Enriching reasons using {temp_name}")
 
         if not self._check_table_exists('reason_categories'):
+            # Log at info level instead of warning
             self.logger.log_msg("Reason_categories table not found, returning original")
             df = self.conn.table(temp_name).df()
             return self.conn.from_df(df)
@@ -197,13 +212,3 @@ class Enricher(BaseTransformer):
         self.logger.log_msg(f"Enriched reasons, got {len(df)} rows")
 
         return self.conn.from_df(df)
-
-    def _check_table_exists(self, table_name):
-        """Check if a table is registered in DuckDB."""
-        try:
-            self.conn.table(table_name)
-            self.logger.log_msg(f"Table {table_name} exists")
-            return True
-        except Exception as e:
-            self.logger.log_warning(f"Table {table_name} does not exist: {e}")
-            return False
