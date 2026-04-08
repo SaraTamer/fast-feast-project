@@ -9,16 +9,16 @@ class TransformationOrchestrator:
 
     def __init__(self, duckdb_conn):
         self.masker = PIIMasker()
-        self.enricher = Enricher(duckdb_conn)
-        self.metrics = MetricsEngine()
-        self.audit = AuditInjector()
+        self.enricher = Enricher(duckdb_conn.conn)
+        self.metrics = MetricsEngine(duckdb_conn.conn)
+        self.audit = AuditInjector(duckdb_conn.conn)
 
     def run_all(self, table_name: str, relation: duckdb.DuckDBPyRelation, batch_id: str) -> duckdb.DuckDBPyRelation:
         # Add audit metadata
         relation = self.audit.transform(relation, batch_id)
 
         # Apply PII masking
-        relation = self.masker.transform(table_name, relation)
+        # relation = self.masker.transform(table_name, relation)
 
         # Enrich with dimension joins
         relation = self.enricher.transform(table_name, relation)

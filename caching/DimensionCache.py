@@ -1,11 +1,10 @@
-from db.connections import DuckDBConnection
 from config.schema_loader import SchemaLoader
 from core.logger import AuditLogger
 
 class DimensionCache:
 
-    def __init__(self):
-        self.duck = DuckDBConnection().conn
+    def __init__(self, duck_db_connection):
+        self.duck = duck_db_connection.conn
         self.cached_dimensions = set()
         self.logger = AuditLogger()
 

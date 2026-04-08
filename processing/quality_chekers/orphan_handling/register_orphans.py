@@ -2,14 +2,14 @@ import json
 from datetime import datetime
 
 from core.logger import AuditLogger
-from db.connections import DuckDBConnection,SnowflakeConnection
+from db.connections import SnowflakeConnection
 from config.config_loader import Config
 from db.warehouse_manager import WarehouseManager
 
 class OrphansRegistrar:
 
-    def __init__(self):
-        self.duckdb = DuckDBConnection()
+    def __init__(self, duckdb_conn):
+        self.duckdb = duckdb_conn
         self.logger = AuditLogger()
         self.config = Config()
 
