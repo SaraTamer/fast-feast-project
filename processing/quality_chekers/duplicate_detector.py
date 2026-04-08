@@ -2,7 +2,7 @@ import duckdb
 import pandas as pd
 from typing import Dict, List, Any, Optional
 from core.logger import AuditLogger
-from db.connections import SnowflakeConnection
+from db.connections import SnowflakeConnection, DuckDBConnection
 from config.config_loader import Config
 from config.schema_loader import SchemaLoader
 from datetime import datetime
@@ -15,7 +15,7 @@ class DuplicateChecker:
     Prevents duplicate inserts by identifying records that already exist in production
     """
 
-    def __init__(self, metrics_tracker: MetricsTracker = None):
+    def __init__(self, metrics_tracker: MetricsTracker, duckdb: DuckDBConnection):
         """Initialize with Snowflake connection (production DWH)"""
         self.logger = AuditLogger()
         self.config = Config()
@@ -27,7 +27,7 @@ class DuplicateChecker:
         self.database = self._get_current_database()
 
         # DuckDB for local processing
-        self.duckdb = duckdb.connect(':memory:')
+        self.duckdb = duckdb
 
         # Quality metrics
         self.quality_metrics = {

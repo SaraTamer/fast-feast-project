@@ -3,14 +3,13 @@ import json
 import uuid
 from datetime import datetime
 from core.logger import AuditLogger
-from db.connections import DuckDBConnection, SnowflakeConnection
+from db.connections import SnowflakeConnection
 from db.warehouse_manager import WarehouseManager
 
 
 class ErrorBatchWriter:
 
     def __init__(self, database="FASTFEASTDWH", schema="PUBLIC"):
-        self.duckdb = DuckDBConnection()
         self.logger = AuditLogger()
         self.snowflake = SnowflakeConnection().conn
         self.database = database

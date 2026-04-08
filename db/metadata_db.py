@@ -1,9 +1,8 @@
 import hashlib
-from db.connections import DuckDBConnection
 
 class MetadataTracker:
-    def __init__(self, hash_algorithm='sha256'):
-        self.conn = DuckDBConnection().conn
+    def __init__(self, duckdb_conn, hash_algorithm='sha256'):
+        self.conn = duckdb_conn.conn
         self.hash_algorithm = hash_algorithm
 
         # Updated schema to store file_hash instead of filename
