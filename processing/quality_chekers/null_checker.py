@@ -208,6 +208,7 @@ class NullChecker:
             self.metrics_tracker.update_null_records(len(null_records_relation))
             self.metrics_tracker.update_clean_records(clean_records_count)
             self.metrics_tracker.update_quarantined(len(rows_with_nulls))
+            self.metrics_tracker.update_null_percentages(table_name, null_summary)
 
         # Update quality metrics
         self.quality_metrics['null_percentages'][table_name] = null_summary
