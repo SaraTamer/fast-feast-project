@@ -1,6 +1,4 @@
 import hashlib
-import os
-
 
 class MetadataTracker:
     def __init__(self, duckdb_conn, hash_algorithm='sha256'):
@@ -49,6 +47,7 @@ class MetadataTracker:
             return
 
         # Get file size for metadata
+        import os
         file_size = os.path.getsize(file_path) if os.path.exists(file_path) else None
 
         self.conn.execute(
@@ -56,17 +55,3 @@ class MetadataTracker:
                VALUES (?, ?, ?)""",
             (file_hash, file_path, file_size)
         )
-
-    def clear_all(self):
-        """Clear all processed files from the tracking table."""
-        result = self.conn.execute("SELECT COUNT(*) FROM processed_files").fetchone()
-        count = result[0] if result else 0
-
-        self.conn.execute("DELETE FROM processed_files")
-        self.conn.execute("VACUUM")  # Optional: reclaim disk space
-
-        print(f"Cleared {count} records from processed_files tracking")
-
-    def reset(self):
-        """Alias for clear_all() - resets all tracking data."""
-        self.clear_all()

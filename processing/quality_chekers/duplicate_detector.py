@@ -1,11 +1,8 @@
 import duckdb
-import numpy as np
 import pandas as pd
-import re
 from typing import Dict, List, Any, Optional
 from core.logger import AuditLogger
 from db.connections import SnowflakeConnection, DuckDBConnection
-from db.warehouse_manager import WarehouseManager
 from config.config_loader import Config
 from config.schema_loader import SchemaLoader
 from datetime import datetime
@@ -18,22 +15,7 @@ class DuplicateChecker:
     Prevents duplicate inserts by identifying records that already exist in production
     """
 
-    # Fact tables that need duplicate checking (streaming data)
-    FACT_TABLES = {
-        'orders': 'fact_orders',
-        'tickets': 'fact_tickets',
-        'ticket_events': 'fact_ticket_events'
-    }
-
-    # Dimension tables don't need duplicate checking (they are overwritten)
-    DIMENSION_TABLES = {
-        'customers', 'drivers', 'restaurants', 'agents', 'cities',
-        'regions', 'reasons', 'categories', 'segments', 'teams',
-        'channels', 'priorities', 'reason_categories'
-    }
-
-    def __init__(self, metrics_tracker: MetricsTracker, duckdb: DuckDBConnection,
-                 database="FASTFEASTDWH", schema="SILVER"):
+    def __init__(self, metrics_tracker: MetricsTracker, duckdb: DuckDBConnection):
         """Initialize with Snowflake connection (production DWH)"""
         self.logger = AuditLogger()
         self.config = Config()
@@ -41,15 +23,11 @@ class DuplicateChecker:
         self.metrics_tracker = metrics_tracker
 
         # Connect to Snowflake (production DWH)
-        self.snowflake = SnowflakeConnection()
-        self.database = database
-        self.schema = schema
+        self.snowflake = SnowflakeConnection().conn
+        self.database = self._get_current_database()
 
         # DuckDB for local processing
-        self.duckdb = duckdb.conn
-
-        # Initialize warehouse manager
-        self.warehouse_manager = WarehouseManager(self.snowflake.conn, "COMPUTE_WH")
+        self.duckdb = duckdb
 
         # Quality metrics
         self.quality_metrics = {
@@ -61,132 +39,52 @@ class DuplicateChecker:
             'table_checked': None
         }
 
-    def _sanitize_name(self, name: str) -> str:
-        """Sanitize table/column names to be DuckDB-compatible."""
-        if not name:
-            return "temp_table"
-        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
-        if sanitized and sanitized[0].isdigit():
-            sanitized = f"t_{sanitized}"
-        return sanitized
-
-    def _safe_drop(self, name: str):
-        """Safely drop a table or view if it exists."""
-        try:
-            self.duckdb.execute(f"DROP TABLE IF EXISTS {name}")
-        except Exception:
-            try:
-                self.duckdb.execute(f"DROP VIEW IF EXISTS {name}")
-            except:
-                pass
-
-    def _needs_duplicate_check(self, table_name: str) -> bool:
-        """Check if table needs duplicate checking (only fact tables)."""
-        return table_name in self.FACT_TABLES
-
-    def _get_target_table_name(self, table_name: str) -> str:
-        """Get the target table name in Snowflake."""
-        if table_name in self.FACT_TABLES:
-            return f"{self.database}.{self.schema}.{self.FACT_TABLES[table_name]}"
-        elif table_name in self.DIMENSION_TABLES:
-            return f"{self.database}.{self.schema}.dim_{table_name}"
-        else:
-            return f"{self.database}.{self.schema}.{table_name}"
-
-    def _fetch_existing_keys_from_snowflake(self, table_name: str, primary_keys: List[str],
-                                            temp_table: str) -> pd.DataFrame:
-        """
-        Fetch existing primary keys from Snowflake fact table.
-        Uses warehouse manager to ensure warehouse is running.
-        """
-        target_table = self._get_target_table_name(table_name)
-        pk_columns = ", ".join([f'"{pk}"' for pk in primary_keys])
-
-        # Get distinct key combinations from incoming data
-        distinct_keys_query = f"""
-            SELECT DISTINCT {pk_columns}
-            FROM {temp_table}
-        """
-        distinct_keys = self.duckdb.execute(distinct_keys_query).fetchdf()
-
-        if len(distinct_keys) == 0:
-            return pd.DataFrame()
-
-        # Build WHERE clause for Snowflake query
-        where_conditions = []
-        for pk in primary_keys:
-            values = distinct_keys[pk].dropna().unique().tolist()
-            if values:
-                escaped_values = [str(v).replace("'", "''") for v in values]
-                values_str = ", ".join([f"'{v}'" for v in escaped_values])
-                where_conditions.append(f'"{pk}" IN ({values_str})')
-
-        if not where_conditions:
-            return pd.DataFrame()
-
-        where_clause = " AND ".join(where_conditions)
-        snowflake_query = f"""
-            SELECT {pk_columns}
-            FROM {target_table}
-            WHERE {where_clause}
-        """
-
-        try:
-            self.logger.log_msg(f"Querying Snowflake for existing keys in {table_name}")
-
-            # ✅ Use warehouse manager to ensure warehouse is running
-            with self.warehouse_manager.auto_manage():
-                cursor = self.snowflake.conn.cursor()
-                cursor.execute(snowflake_query)
-                result = cursor.fetch_pandas_all()
-                cursor.close()
-
-            self.logger.log_msg(f"Found {len(result)} existing records in Snowflake")
-            return result
-        except Exception as e:
-            self.logger.log_warning(f"Could not query Snowflake: {e}")
-            return pd.DataFrame()
-
     def check_duplicates(self, relation, table_name: str, batch_id: str = None) -> Dict[str, Any]:
         """
-        Check for duplicates between incoming data and Snowflake DWH.
-        Only checks fact tables; dimension tables skip duplicate checking.
+        Check for duplicates between incoming DataFrame and Snowflake DWH
+
+        Args:
+            relation: DuckDB relation, pandas DataFrame, or list of dicts with incoming data
+            table_name: Name of the table (orders, tickets, customers, etc.)
+            batch_id: Optional batch identifier for logging (e.g., '2026-02-20' or '2026-02-20_09')
+
+        Returns:
+            Dictionary with:
+                - unique_relation: DataFrame with only new records (no duplicates)
+                - duplicate_relation: DataFrame with records that already exist in Snowflake
+                - metrics: Quality metrics about the check
         """
         self.quality_metrics['check_timestamp'] = datetime.now()
         self.quality_metrics['table_checked'] = table_name
 
-        # Skip duplicate check for dimension tables
-        if not self._needs_duplicate_check(table_name):
-            self.logger.log_msg(f"Skipping duplicate check for dimension table: {table_name}")
-            return {
-                'unique_relation': relation,
-                'duplicate_relation': None,
-                'metrics': {'skipped': True, 'reason': 'dimension_table'},
-                'warning': 'Duplicate check skipped for dimension table'
-            }
+        # Convert input to DuckDB for processing
+        temp_table = f"temp_{table_name}_{batch_id or 'stream'}_{int(datetime.now().timestamp())}"
 
-        # Convert input to DataFrame for processing
-        if hasattr(relation, 'df'):
-            input_df = relation.df()
+        if hasattr(relation, 'register'):
+            # Already a DuckDB relation
+            self.duckdb.register(temp_table, relation)
         elif isinstance(relation, pd.DataFrame):
-            input_df = relation
+            self.duckdb.register(temp_table, relation)
         else:
-            input_df = pd.DataFrame(relation)
+            # Assume it's a list of dicts
+            temp_relation = pd.DataFrame(relation)
+            self.duckdb.register(temp_table, temp_relation)
 
-        if len(input_df) == 0:
+        # Get total records
+        total_records = self.duckdb.execute(f"SELECT COUNT(*) FROM {temp_table}").fetchone()[0]
+        self.quality_metrics['total_records_checked'] = total_records
+
+        if total_records == 0:
             self.logger.log_warning(f"No records to check for {table_name}")
             return {
-                'unique_relation': self.duckdb.from_df(input_df),
+                'unique_relation': relation,
                 'duplicate_relation': None,
                 'metrics': self.quality_metrics,
                 'warning': 'Empty DataFrame'
             }
 
-        self.quality_metrics['total_records_checked'] = len(input_df)
-
         # Get primary keys for the table
-        schema = self.schema_loader.tables.get(table_name, {})
-        primary_keys = schema.get('primary_keys', [])
+        primary_keys = self.schema_loader.schemas.get(table_name, {}).get('primary_keys', [])
 
         if not primary_keys:
             self.logger.log_err(f"No primary keys defined for {table_name} in schema.yaml")
@@ -197,43 +95,62 @@ class DuplicateChecker:
                 'error': f'No primary keys defined for {table_name}'
             }
 
+        # Get existing records from Snowflake for these primary keys
+        snowflake_table = self._get_table_name_with_schema(table_name)
+        pk_columns = ", ".join(primary_keys)
+
+        # Build query to fetch existing primary keys from Snowflake
+        snowflake_query = f"""
+            SELECT {pk_columns} 
+            FROM {snowflake_table}
+            WHERE {self._build_where_clause(primary_keys, temp_table)}
+        """
+
         try:
-            # Register input_df as temp table for Snowflake query
-            temp_table = f"temp_{table_name}_{int(datetime.now().timestamp())}"
-            self.duckdb.register(temp_table, input_df)
+            # Fetch existing keys from Snowflake and load into DuckDB
+            snowflake_cursor = self.snowflake.cursor()
+            snowflake_cursor.execute(snowflake_query)
+            existing_keys_relation = snowflake_cursor.fetch_pandas_all()
 
-            # Fetch existing keys from Snowflake (warehouse managed inside)
-            existing_keys_df = self._fetch_existing_keys_from_snowflake(table_name, primary_keys, temp_table)
-            self.duckdb.unregister(temp_table)
+            if len(existing_keys_relation) > 0:
+                # Register existing keys in DuckDB
+                self.duckdb.register("existing_keys", existing_keys_relation)
 
-            if len(existing_keys_df) > 0:
-                # Build a set of existing key tuples for fast lookup
-                existing_keys_set = set()
-                for _, row in existing_keys_df.iterrows():
-                    key_tuple = tuple(row[pk] for pk in primary_keys)
-                    existing_keys_set.add(key_tuple)
+                # Build duplicate detection query
+                join_conditions = " AND ".join([
+                    f"t.{pk} = ek.{pk}" for pk in primary_keys
+                ])
 
-                # Filter input_df to find new records
-                mask = []
-                for _, row in input_df.iterrows():
-                    key_tuple = tuple(row[pk] for pk in primary_keys)
-                    is_duplicate = key_tuple in existing_keys_set
-                    mask.append(not is_duplicate)
+                # Find duplicates
+                duplicate_query = f"""
+                    SELECT t.* 
+                    FROM {temp_table} t
+                    INNER JOIN existing_keys ek
+                    ON {join_conditions}
+                """
 
-                unique_df = input_df[mask].copy()
-                duplicate_df = input_df[~np.array(mask)].copy() if any(~np.array(mask)) else pd.DataFrame()
+                # Find new records
+                new_records_query = f"""
+                    SELECT t.* 
+                    FROM {temp_table} t
+                    LEFT JOIN existing_keys ek
+                    ON {join_conditions}
+                    WHERE ek.{primary_keys[0]} IS NULL
+                """
+
+                duplicate_relation = self.duckdb.execute(duplicate_query).fetchdf()
+                unique_relation = self.duckdb.execute(new_records_query)
 
                 # Update metrics
-                self.quality_metrics['duplicates_found'] = len(duplicate_df)
-                self.quality_metrics['new_records'] = len(unique_df)
+                self.quality_metrics['duplicates_found'] = len(duplicate_relation)
+                self.quality_metrics['new_records'] = total_records - len(duplicate_relation)
                 self.quality_metrics['duplicate_rate'] = (
-                    len(duplicate_df) / len(input_df) if len(input_df) > 0 else 0
+                    len(duplicate_relation) / total_records if total_records > 0 else 0
                 )
-
                 # Update metrics tracker
                 if self.metrics_tracker:
-                    self.metrics_tracker.update_records(len(input_df))
-                    self.metrics_tracker.update_duplicates(len(duplicate_df))
+                    self.metrics_tracker.update_records(total_records)
+                    self.metrics_tracker.update_duplicates(len(duplicate_relation))
 
                 # Log results
                 self.logger.log_msg(
@@ -246,39 +163,53 @@ class DuplicateChecker:
                 # Alert if duplicate rate too high
                 max_duplicate_rate = self.config.load_the_yaml().get('quality_thresholds', {}).get('max_duplicate_rate',
                                                                                                    0.10)
+
                 if self.quality_metrics['duplicate_rate'] > max_duplicate_rate:
                     self.logger.log_warning(
                         f"⚠️ HIGH DUPLICATE RATE: {self.quality_metrics['duplicate_rate']:.2%} "
-                        f"for {table_name} (threshold: {max_duplicate_rate:.2%})"
+                        f"for {table_name} (threshold: {max_duplicate_rate:.2%}). "
+                        f"Check if data is being re-ingested."
                     )
+
+                # Log duplicate examples
+                if len(duplicate_relation) > 0 and len(duplicate_relation) <= 5:
+                    for _, row in duplicate_relation.iterrows():
+                        pk_values = {pk: row[pk] for pk in primary_keys}
+                        self.logger.log_warning(f"  Duplicate: {pk_values}")
+                elif len(duplicate_relation) > 0:
+                    self.logger.log_warning(
+                        f"  First 5 duplicates: {duplicate_relation[primary_keys].head().to_dict('records')}")
 
             else:
                 # No existing records in Snowflake
                 self.quality_metrics['duplicates_found'] = 0
-                self.quality_metrics['new_records'] = len(input_df)
+                self.quality_metrics['new_records'] = total_records
                 self.quality_metrics['duplicate_rate'] = 0.0
-                unique_df = input_df.copy()
-                duplicate_df = pd.DataFrame()
+                unique_relation = self.duckdb.execute(f"SELECT * FROM {temp_table}")
 
                 self.logger.log_msg(
                     f"No existing records found in Snowflake for {table_name}. "
-                    f"All {len(input_df)} records are new."
+                    f"All {total_records} records are new."
                 )
 
-            # Return as DuckDB relation from DataFrame (no temp table dependency)
+            # Clean up
+            self.duckdb.execute(f"DROP TABLE IF EXISTS {temp_table}")
+            self.duckdb.execute("DROP TABLE IF EXISTS existing_keys")
+
             return {
-                'unique_relation': self.duckdb.from_df(unique_df),
-                'duplicate_relation': self.duckdb.from_df(duplicate_df) if len(duplicate_df) > 0 else None,
+                'unique_relation': unique_relation,
+                'duplicate_relation': duplicate_relation if 'duplicate_relation' in locals() and len(duplicate_relation) > 0 else None,
                 'metrics': self.quality_metrics.copy()
             }
 
         except Exception as e:
-            error_msg = f"Error checking duplicates for {table_name}: {e}"
-            self.logger.log_err(error_msg)
+            error_msg = f"Error checking duplicates for {table_name} in Snowflake: {e}"
+            self.logger.log_error(error_msg)
+            self.duckdb.execute(f"DROP TABLE IF EXISTS {temp_table}")
 
-            # On error, return original as DuckDB relation
+            # On error, return original DF (fail safe - process anyway)
             return {
-                'unique_relation': self.duckdb.from_df(input_df),
+                'unique_relation': relation,
                 'duplicate_relation': None,
                 'metrics': self.quality_metrics,
                 'error': str(e)
@@ -290,6 +221,64 @@ class DuplicateChecker:
             'checker_type': 'duplicate_checker',
             'dwh_type': 'snowflake',
             'database': self.database,
-            'schema': self.schema,
             'metrics': self.quality_metrics
         }
+
+    def _get_current_database(self) -> str:
+        """Get current Snowflake database name"""
+        # TODO: get dwh table names from config.yaml file
+        try:
+            result = self.snowflake.execute("SELECT CURRENT_DATABASE()").fetchone()
+            return result[0] if result else "FASTFEAST_DWH"
+        except:
+            return "FASTFEAST_DWH"
+
+    def _get_table_name_with_schema(self, table_name: str) -> str:
+        """Get fully qualified table name for Snowflake"""
+        #TODO replace schema name
+        # Assuming schema is 'ANALYTICS' or 'DWH'
+        return f"{self.database}.ANALYTICS.{table_name}"
+
+    def _build_where_clause(self, primary_keys: List[str], temp_table: str) -> str:
+        """Build WHERE clause to fetch only relevant existing records"""
+        # Get distinct key combinations from temp table
+        pk_columns = ", ".join(primary_keys)
+
+        # Create a subquery to get distinct keys
+        subquery = f"""
+            WITH temp_keys AS (
+                SELECT DISTINCT {pk_columns}
+                FROM {temp_table}
+            )
+            SELECT {pk_columns}
+            FROM temp_keys
+        """
+
+        try:
+            distinct_keys = self.duckdb.execute(subquery).fetchdf()
+
+            if len(distinct_keys) == 0:
+                return "1=0"  # No records
+
+            # Build IN clause for each primary key
+            conditions = []
+            for pk in primary_keys:
+                # Get unique values for this primary key
+                values = distinct_keys[pk].dropna().unique().tolist()
+                if values:
+                    # Escape single quotes in string values - FIXED VERSION
+                    escaped_values = []
+                    for val in values:
+                        # Convert to string and escape single quotes
+                        str_val = str(val)
+                        escaped_val = str_val.replace("'", "''")
+                        escaped_values.append(f"'{escaped_val}'")
+
+                    values_str = ", ".join(escaped_values)
+                    conditions.append(f"{pk} IN ({values_str})")
+
+            return " AND ".join(conditions) if conditions else "1=1"
+
+        except Exception as e:
+            self.logger.log_warning(f"Could not build optimized WHERE clause: {e}")
+            return "1=1"  # Fetch all records (slow but safe)

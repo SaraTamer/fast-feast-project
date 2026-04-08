@@ -13,34 +13,40 @@ from config.config_loader import Config
 from config.schema_loader import SchemaLoader
 from processing.schema_validator import SchemaValidator
 from processing.formats import FormatChecker      
-
+from db.connections import DuckDBConnection
 from db.metadata_db import MetadataTracker
 from caching.DimensionCache import DimensionCache
-
+from db.dwh_loader import DWHLoader
 
 class PipelineApp:
 
     def __init__(self):
 
         self.logger = AuditLogger()
+        self.duck_db_connection = DuckDBConnection()
         config = Config()
         schema_loader = SchemaLoader(config.schemas_path())
         validator = SchemaValidator(schema_loader)
         format_checker  = FormatChecker()
-        metadata = MetadataTracker()
-        self.dim_cache = DimensionCache()
+        metadata = MetadataTracker(self.duck_db_connection)
+        self.dim_cache = DimensionCache(self.duck_db_connection)
+        self.dwh_loader = DWHLoader()
         self.batch_pipeline = BatchPipeline(
             metadata,
             validator,
             format_checker,
-            self.dim_cache
+            self.dim_cache,
+            self.dwh_loader,
+            self.duck_db_connection
         )
 
         self.stream_pipeline = StreamPipeline(
             metadata,
             validator,
             format_checker,
-            self.dim_cache
+            self.dim_cache,
+            self.dwh_loader,
+            self.duck_db_connection
         )
 
         self.batch_watcher = BatchWatcher(
