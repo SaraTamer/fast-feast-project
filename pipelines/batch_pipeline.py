@@ -69,9 +69,7 @@ class BatchPipeline:
                         )
 
                         clean_relation = null_check_result['clean_relation']
-                        clean_count = null_check_result['metrics']['clean_records_count']
 
-                        should_process = False
                         if clean_relation is not None:
                             try:
                                 # Register temp and query count
@@ -83,7 +81,6 @@ class BatchPipeline:
                                 self.duckdb_conn.conn.unregister(temp_name)
 
                                 if row_count > 0:
-                                    should_process = True
                                     self.logger.log_msg(f"Clean relation has {row_count} rows (via SQL)")
                                 else:
                                     self.logger.log_warning(f"Clean relation has 0 rows for {table_name}")
