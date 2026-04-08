@@ -25,6 +25,10 @@ tables:
       created_at: "timestamp"
       updated_at: "timestamp"
     primary_key: "customer_id"
+    formats:
+      email: "email"
+      phone: "phone"
+      # signup_date: "date"
 
   drivers:
     file_type: "csv"
@@ -61,6 +65,9 @@ tables:
       created_at: "timestamp"
       updated_at: "timestamp"
     primary_key: "driver_id"
+    formats:
+      driver_phone: "phone"
+      # hire_date: "date"
 
   restaurants:
     file_type: "json"
@@ -87,6 +94,8 @@ tables:
       created_at: "timestamp"
       updated_at: "timestamp"
     primary_key: "restaurant_id"
+    formats:
+
 
   agents:
     file_type: "csv"
@@ -119,6 +128,11 @@ tables:
       created_at: "timestamp"
       updated_at: "timestamp"
     primary_key: "agent_id"
+    formats:
+      # hire_date: "date"
+      agent_email: "email"
+      agent_phone: "phone"
+
 
   teams:
     file_type: "csv"
@@ -129,6 +143,7 @@ tables:
       team_id: "int"
       team_name: "string"
     primary_key: "team_id"
+    formats:
 
   channels:
     file_type: "csv"
@@ -139,6 +154,7 @@ tables:
       channel_id: "int"
       channel_name: "string"
     primary_key: "channel_id"
+    formats:
 
   priorities:
     file_type: "csv"
@@ -155,6 +171,7 @@ tables:
       sla_first_response_min: "int"
       sla_resolution_min: "int"
     primary_key: "priority_id"
+    formats:
 
   reason_categories:
     file_type: "csv"
@@ -165,6 +182,7 @@ tables:
       reason_category_id: "int"
       category_name: "string"
     primary_key: "reason_category_id"
+    formats:
 
   cities:
     file_type: "json"
@@ -179,6 +197,7 @@ tables:
       country: "string"
       timezone: "string"
     primary_key: "city_id"
+    formats:
 
   categories:
     file_type: "csv"
@@ -189,6 +208,7 @@ tables:
       category_id: "int"
       category_name: "string"
     primary_key: "category_id"
+    formats:
 
   regions:
     file_type: "csv"
@@ -203,6 +223,7 @@ tables:
       city_id: "int"
       delivery_base_fee: "float"
     primary_key: "region_id"
+    formats:
 
   segments:
     file_type: "csv"
@@ -217,6 +238,7 @@ tables:
       discount_pct: "float"
       priority_support: "boolean"
     primary_key: "segment_id"
+    formats:
 
   reasons:
     file_type: "csv"
@@ -233,6 +255,7 @@ tables:
       severity_level: "string"
       typical_refund_pct: "float"
     primary_key: "reason_id"
+    formats:
 
   # Stream data
   orders:
@@ -266,6 +289,8 @@ tables:
       order_created_at: "timestamp"
       delivered_at: "timestamp"
     primary_key: "order_id"
+    formats:
+
 
   tickets:
     file_type: "csv"
@@ -304,6 +329,8 @@ tables:
       sla_first_due_at: "timestamp"
       sla_resolve_due_at: "timestamp"
     primary_key: "ticket_id"
+    formats:
+
 
   ticket_events:
     file_type: "json"
@@ -324,3 +351,4 @@ tables:
       new_status: "string"
       notes: "string"
     primary_key: "event_id"
+    formats:

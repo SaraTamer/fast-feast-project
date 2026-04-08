@@ -5,11 +5,12 @@ import time
 class WarehouseManager:
     """Manages Snowflake warehouse state automatically."""
 
-    def __init__(self, connection, warehouse_name="COMPUTE_WH"):
+    def __init__(self, connection, warehouse_name="COMPUTE_WH", compute_pool="SYSTEM_COMPUTE_POOL_CPU"):
         self.conn = connection
         self.warehouse_name = warehouse_name
         self.logger = AuditLogger()
         self.was_suspended = False
+        self.compute_pool_name = compute_pool
 
     def resume_if_needed(self):
         """Resume warehouse if it's suspended."""
@@ -39,6 +40,7 @@ class WarehouseManager:
             self.logger.log_err(f"Error checking warehouse state: {e}")
             # Try to resume anyway
             cursor.execute(f"ALTER WAREHOUSE {warehouse_upper} RESUME")
+            cursor.execute(f"ALTER COMPUTE POOL {self.compute_pool_name} RESUME")
             time.sleep(2)
             self.was_suspended = True
         finally:
@@ -51,6 +53,7 @@ class WarehouseManager:
             try:
                 self.logger.log_msg(f"Suspending warehouse {self.warehouse_name}...")
                 cursor.execute(f"ALTER WAREHOUSE {self.warehouse_name} SUSPEND")
+                cursor.execute(f"ALTER COMPUTE POOL {self.compute_pool_name} SUSPEND")
                 self.logger.log_msg(f"Warehouse {self.warehouse_name} suspended")
             finally:
                 cursor.close()
