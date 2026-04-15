@@ -1,15 +1,14 @@
 import json
-from db.connections import DatabaseManager
-from core.logger import Logger
+from db.connections import SnowflakeConnection
+from core.logger import AuditLogger as Logger
 
 
 class FactReplayService:
 
     def __init__(self):
 
-        self.db = DatabaseManager()
+        self.snow = SnowflakeConnection().conn
         self.logger = Logger()
-        self.snow = self.db.get_snowflake()
 
 
     def insert_fact(self, table_name, payload):

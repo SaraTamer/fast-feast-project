@@ -1,6 +1,5 @@
 import yaml
 
-
 class SchemaLoader:
     def __init__(self, schemas_path: str):
         with open(schemas_path, 'r') as file:
@@ -21,6 +20,18 @@ class SchemaLoader:
         return self.schemas.get(table_name, {}).get('types', {})
 
     def get_primary_key(self, table_name: str):
+        return self.schemas.get(table_name, {}).get('primary_key', {})
+
+    def get_fact_table_names(self):
+        fact_tables = []
+        for table_name, schema in self.schemas.items():
+            pk_col = schema.get('primary_key')
+            if pk_col:
+                pk_type = schema.get('types', {}).get(pk_col)
+                if pk_type == 'string':
+                    fact_tables.append(table_name)
+        return fact_tables
+
         # Fix: Handle both 'primary_key' and 'primary_keys' in schema
         pk = self.schemas.get(table_name, {}).get('primary_key')
         if pk is None:
