@@ -22,11 +22,11 @@ class BatchPipeline:
         self.format_checker = format_checker
         self.dim_cache = dim_cache
         self.metrics_tracker = MetricsTracker(database="FASTFEASTDWH", schema="SILVER")
-        self.orphan_checker = OrphanChecker()
-        self.null_checker = NullChecker(self.metrics_tracker)
+        self.orphan_checker = OrphanChecker(duckdb_conn)
+        self.null_checker = NullChecker(self.metrics_tracker, duckdb_conn)
         self.dwh_loader = dwh_loader
         self.transformation_orchestrator = TransformationOrchestrator(duckdb_conn)
-        self.retry_service = RetryService()
+        self.retry_service = RetryService(duckdb_conn)
         self.schema_loader = SchemaLoader('config/schema.yaml')
         self.fact_tables = self.schema_loader.get_fact_table_names()
 
@@ -106,7 +106,7 @@ class BatchPipeline:
                             self.logger.log_msg(f"Calling retry service for dim={table_name}, fact_table={fact_table}")
                             self.retry_service.retry(
                                 dim_name=table_name,
-                                table_name=fact_table
+                                fact_table_name=fact_table
                             )
                             self.logger.log_msg(f"Completed retry service for dim={table_name}, fact_table={fact_table}")
                         self.metrics_tracker.increment_files_processed()

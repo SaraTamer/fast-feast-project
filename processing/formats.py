@@ -48,13 +48,13 @@ class FormatChecker:
         clean_relation = relation.filter(f"NOT ({any_failure})")
  
         if bad_rows_df is not None and not bad_rows_df.empty:
-            self.audit_logger.log(
-                event="format_check",
-                detail={
-                    "bad_row_count": len(bad_rows_df),
-                    "checked_columns": [m["column"] for m in format_columns],
-                }
-            )
+            # self.audit_logger.log(
+            #     event="format_check",
+            #     detail={
+            #         "bad_row_count": len(bad_rows_df),
+            #         "checked_columns": [m["column"] for m in format_columns],
+            #     }
+            # )
 
 
             # Only quarantine if full context is provided

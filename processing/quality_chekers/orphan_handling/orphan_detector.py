@@ -64,7 +64,7 @@ class OrphanChecker:
             self.logger.log_warning(f"{len(rows)} orphans detected in {table_name} referencing {dim_name}")
 
             # Get column names to find fk_column index
-            result = self.duckdb.execute(f"SELECT * FROM fact_table LIMIT 1")
+            result = self.duckdb.execute(f"SELECT * FROM clean_table LIMIT 1")
             column_names = [desc[0] for desc in result.description]
             fk_col_index = column_names.index(fk_column) if fk_column in column_names else 0
 
@@ -83,10 +83,10 @@ class OrphanChecker:
             )
 
 
-
             # Track orphans for reconciliation
             for r in rows:
-                all_orphans.append((r, fk_column, dim_name))
+                fk_value = r[fk_col_index]
+                all_orphans.append((r, fk_column, fk_value, dim_name))
 
             # Remove orphans from clean_relation
             orphan_ids = [str(r[0]) for r in rows if r and len(r) > 0]
