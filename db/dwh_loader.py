@@ -28,19 +28,6 @@ class DWHLoader:
         'orders', 'tickets', 'ticket_events'
     }
 
-    TYPE_MAPPING = {
-        'VARCHAR': 'STRING',
-        'STRING': 'STRING',
-        'INTEGER': 'NUMBER',
-        'BIGINT': 'NUMBER',
-        'FLOAT': 'FLOAT',
-        'DOUBLE': 'FLOAT',
-        'BOOLEAN': 'BOOLEAN',
-        'TIMESTAMP': 'TIMESTAMP',
-        'DATE': 'DATE',
-        'DECIMAL': 'NUMBER',
-    }
-
     def __init__(self, database="FASTFEASTDWH", schema="SILVER"):
         self.logger = AuditLogger()
         self.database = database
@@ -89,25 +76,6 @@ class DWHLoader:
             return float(value)
         else:
             return value
-
-    def _get_row_count(self, relation):
-        """Safely get row count from DuckDB relation."""
-        try:
-            df = relation.df()
-            return len(df)
-        except Exception as e:
-            self.logger.log_warning(f"Could not get row count via DataFrame: {e}")
-            return 0
-
-    def _get_snowflake_type(self, duckdb_type):
-        """Convert DuckDB type to Snowflake type."""
-        duckdb_type_str = str(duckdb_type).upper()
-
-        for duckdb_t, snowflake_t in self.TYPE_MAPPING.items():
-            if duckdb_t in duckdb_type_str:
-                return snowflake_t
-
-        return 'STRING'
 
     def _get_column_definitions(self, df):
         """Extract column definitions from DataFrame."""
@@ -189,7 +157,7 @@ class DWHLoader:
     def _insert_batch(self, cursor, insert_sql, rows, batch_size=1000):
         """Insert rows in batches."""
         total_inserted = 0
-        for i in range(0, len(rows), batch_size):
+        for i in range(0, len(rows), batch_size): # len(rows) = 10000
             batch = rows[i:i + batch_size]
             cursor.executemany(insert_sql, batch)
             total_inserted += len(batch)

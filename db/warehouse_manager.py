@@ -19,7 +19,7 @@ class WarehouseManager:
             # Use uppercase for warehouse name (Snowflake stores names in uppercase)
             warehouse_upper = self.warehouse_name.upper()
             cursor.execute(f"SHOW WAREHOUSES LIKE '{warehouse_upper}'")
-            result = cursor.fetchone()
+            result = cursor.fetchone()  # row of my warehouse details
 
             if result:
                 # Get column names to find state dynamically
