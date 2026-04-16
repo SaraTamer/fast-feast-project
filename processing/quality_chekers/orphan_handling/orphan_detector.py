@@ -1,5 +1,6 @@
 from time import sleep
 from core.logger import AuditLogger
+from db.connections import DuckDBConnection
 from config.required_cols_loader import RequiredColsLoader
 from config.schema_loader import SchemaLoader
 from config.config_loader import Config
@@ -59,8 +60,17 @@ class OrphanChecker:
             rows = self.duckdb.execute(query).fetchall()
             if not rows:
                 continue
-
+            
             self.logger.log_warning(f"{len(rows)} orphans detected in {table_name} referencing {dim_name}")
+
+            # Get column names to find fk_column index
+            result = self.duckdb.execute(f"SELECT * FROM clean_table LIMIT 1")
+            column_names = [desc[0] for desc in result.description]
+            fk_col_index = column_names.index(fk_column) if fk_column in column_names else 0
+
+            for r in rows:
+                fk_value = r[fk_col_index]
+                all_orphans.append((r, fk_column, fk_value, dim_name))
 
             self.writer.write_batch(
                 table_name=table_name,
@@ -74,36 +84,39 @@ class OrphanChecker:
 
             # Track orphans for reconciliation
             for r in rows:
-                all_orphans.append((r, fk_column, dim_name))
+                fk_value = r[fk_col_index]
+                all_orphans.append((r, fk_column, fk_value, dim_name))
 
             # Remove orphans from clean_relation
-            # Create list of IDs to exclude (assuming first column is primary key)
             orphan_ids = [str(r[0]) for r in rows if r and len(r) > 0]
 
             if orphan_ids:
-                # Convert list to comma-separated string for SQL
                 ids_str = ', '.join([f"'{id}'" for id in orphan_ids])
 
-                # Create new clean table without orphans
                 clean_query = f"""
                     CREATE OR REPLACE TEMP TABLE result_table AS
                     SELECT * FROM clean_table
                     WHERE CAST({primary_key} AS VARCHAR) NOT IN ({ids_str})
                 """
                 self.duckdb.execute(clean_query)
-
-                # Update the registered relation
                 clean_relation = self.duckdb.table("result_table")
+                self.duckdb.register("clean_table", clean_relation)
 
-                self.logger.log_msg(
-                    f"Removed {len(orphan_ids)} orphan records, {clean_relation.count()} records remain")
+                # ✅ Fix: Use SQL COUNT instead of clean_relation.count()
+                count_result = self.duckdb.execute("SELECT COUNT(*) FROM clean_table").fetchone()
+                remaining_count = count_result[0] if count_result else 0
+                self.logger.log_msg(f"Removed {len(orphan_ids)} orphan records, {remaining_count} records remain")
+
+        total_orphans = len(all_orphans)
 
         # Register orphans for retry
         if all_orphans:
-            self.logger.log_msg(f"Orphan batch sent to {self.config.get_errors_table_name}")
+            self.logger.log_msg(f"Orphan batch sent to {self.config.get_errors_table_name()} with {total_orphans} records for {table_name}")
             self.register.register_batch(table_name, primary_key, all_orphans)
+
+            if hasattr(self, 'metrics_tracker') and self.metrics_tracker:
+                self.metrics_tracker.update_orphans(total_orphans)
         else:
             self.logger.log_msg(f"No orphans detected in {table_name}")
 
-        # Return the clean relation (without orphans)
         return clean_relation

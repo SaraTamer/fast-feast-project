@@ -1,6 +1,5 @@
 import yaml
 
-
 class SchemaLoader:
     def __init__(self, schemas_path: str):
         with open(schemas_path, 'r') as file:
@@ -29,15 +28,15 @@ class SchemaLoader:
                 pk = pk[0]  # Return first primary key if list
         return pk
 
-    def get_primary_keys(self, table_name: str):
-        """Return primary keys as list (for composite keys)."""
-        pk = self.schemas.get(table_name, {}).get('primary_keys')
-        if pk is None:
-            pk = self.schemas.get(table_name, {}).get('primary_key', [])
-            if isinstance(pk, str):
-                pk = [pk]
-        return pk if isinstance(pk, list) else [pk] if pk else []
-
+    def get_fact_table_names(self):
+        fact_tables = []
+        for table_name, schema in self.schemas.items():
+            pk_col = schema.get('primary_key')
+            if pk_col:
+                pk_type = schema.get('types', {}).get(pk_col)
+                if pk_type == 'string':
+                    fact_tables.append(table_name)
+        return fact_tables
     def get_columns_meta(self, table_name):
         table = self.schemas.get(table_name, {})
         formats = table.get("formats") or {}
@@ -49,11 +48,3 @@ class SchemaLoader:
             }
             for col, fmt in formats.items()
         ]
-
-    def get_foreign_keys(self, table_name: str):
-        """Get foreign keys for a table."""
-        return self.schemas.get(table_name, {}).get('foreign_keys', [])
-
-    def table_exists(self, table_name: str) -> bool:
-        """Check if table exists in schema."""
-        return table_name in self.schemas

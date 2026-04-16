@@ -23,7 +23,7 @@ rules:
 
 
 snowflake_tables:
-errors_table: "streaming_pipeline_errors"
+  errors_table: "streaming_pipeline_errors"
 
 
 smtp:

@@ -19,7 +19,7 @@ class WarehouseManager:
             # Use uppercase for warehouse name (Snowflake stores names in uppercase)
             warehouse_upper = self.warehouse_name.upper()
             cursor.execute(f"SHOW WAREHOUSES LIKE '{warehouse_upper}'")
-            result = cursor.fetchone()
+            result = cursor.fetchone()  # row of my warehouse details
 
             if result:
                 # Get column names to find state dynamically
@@ -52,8 +52,8 @@ class WarehouseManager:
             cursor = self.conn.cursor()
             try:
                 self.logger.log_msg(f"Suspending warehouse {self.warehouse_name}...")
-                cursor.execute(f"ALTER WAREHOUSE {self.warehouse_name} SUSPEND")
-                cursor.execute(f"ALTER COMPUTE POOL {self.compute_pool_name} SUSPEND")
+                # cursor.execute(f"ALTER WAREHOUSE {self.warehouse_name} SUSPEND")
+                # cursor.execute(f"ALTER COMPUTE POOL {self.compute_pool_name} SUSPEND")
                 self.logger.log_msg(f"Warehouse {self.warehouse_name} suspended")
             finally:
                 cursor.close()
