@@ -1,11 +1,11 @@
 import re
-
 import duckdb
 import pandas as pd
 from typing import Dict, List, Any, Optional, Tuple, Union
 from core.logger import AuditLogger
 from config.config_loader import Config
 from config.required_cols_loader import RequiredColsLoader
+from db.connections import DuckDBConnection
 from processing.error_batch_writer import ErrorBatchWriter
 from datetime import datetime
 from processing.monitoring.metrics_tracker import MetricsTracker
@@ -17,11 +17,11 @@ class NullChecker:
     Provides detailed quality metrics about null percentages
     """
 
-    def __init__(self, matrics_tracker: MetricsTracker = None):
+    def __init__(self, matrics_tracker: MetricsTracker = None, duckdb_conn: DuckDBConnection = None):
         self.logger = AuditLogger()
         self.config = Config()
         self.req_cols_loader = RequiredColsLoader(self.config.req_cols_path())
-        self.duckdb = duckdb.connect(':memory:')
+        self.duckdb = duckdb_conn.conn
 
         # Initialize ErrorBatchWriter for quarantining null records
         self.error_writer = ErrorBatchWriter()
@@ -41,6 +41,13 @@ class NullChecker:
                           quarantine_nulls: bool = True) -> Dict[str, Any]:
         """
         Check for null values in required fields, primary keys, and foreign keys
+
+        Returns:
+            Dict containing:
+                - clean_relation: DuckDB relation (no nulls in required columns)
+                - null_records_relation: DuckDB relation (records with nulls)
+                - null_summary: Dict of null statistics
+                - metrics: Dict of metrics
         """
         self.quality_metrics['check_timestamp'] = datetime.now()
         self.quality_metrics['total_checks_performed'] += 1
@@ -60,7 +67,7 @@ class NullChecker:
             except Exception as e:
                 self.logger.log_err(f"Failed to handle JSON file directly: {e}")
                 return {
-                    'clean_relation': relation,
+                    'clean_relation': duckdb_table,
                     'null_records_relation': None,
                     'null_summary': {},
                     'metrics': {'error': f'JSON handling failed: {e}'}
@@ -72,7 +79,7 @@ class NullChecker:
             except Exception as e:
                 self.logger.log_err(f"Failed to convert to DuckDB table: {e}")
                 return {
-                    'clean_relation': relation,
+                    'clean_relation': duckdb_table,
                     'null_records_relation': None,
                     'null_summary': {},
                     'metrics': {'error': f'Conversion failed: {e}'}
@@ -122,12 +129,17 @@ class NullChecker:
 
         # Find records with nulls
         null_conditions = " OR ".join([f'"{col}" IS NULL' for col in non_null_columns])
+
+        # ✅ Return as DuckDB relation (not DataFrame)
         null_records_relation = self.duckdb.execute(f'SELECT * FROM "{temp_table}" WHERE {null_conditions}').fetchdf()
         clean_records_count = total_records - len(null_records_relation)
 
-        # Get clean records (no nulls in non-null columns)
+        # ✅ Get clean records as DuckDB relation (not DataFrame)
         clean_records_query = f'SELECT * FROM "{temp_table}" WHERE NOT ({null_conditions})'
-        clean_relation = self.duckdb.execute(clean_records_query).fetchdf()
+        clean_relation_df = self.duckdb.execute(clean_records_query).fetchdf()
+
+        # ✅ Convert back to DuckDB relation
+        clean_relation = self.duckdb.from_df(clean_relation_df)
 
         # Calculate null percentages per column
         null_summary = {}
@@ -196,6 +208,7 @@ class NullChecker:
             self.metrics_tracker.update_null_records(len(null_records_relation))
             self.metrics_tracker.update_clean_records(clean_records_count)
             self.metrics_tracker.update_quarantined(len(rows_with_nulls))
+            self.metrics_tracker.update_null_percentages(table_name, null_summary)
 
         # Update quality metrics
         self.quality_metrics['null_percentages'][table_name] = null_summary
@@ -232,8 +245,9 @@ class NullChecker:
         self._safe_drop(temp_table)
 
         return {
-            'clean_relation': clean_relation,
-            'null_records_relation': null_records_relation if len(null_records_relation) > 0 else None,
+            'clean_relation': clean_relation,  # ✅ DuckDB relation
+            'null_records_relation': self.duckdb.from_df(null_records_relation) if len(
+                null_records_relation) > 0 else None,  # ✅ DuckDB relation
             'null_summary': null_summary,
             'metrics': self.quality_metrics['failed_records'][table_name]
         }
@@ -241,44 +255,46 @@ class NullChecker:
     def _convert_to_duckdb_table(self, relation, temp_table: str, file_path: str = None):
         """
         Convert various input types to a DuckDB table.
-        Handles: DuckDBPyRelation, pandas DataFrame, dict, list, etc.
+        Returns DuckDB table reference.
         """
         # Case 1: Already a DuckDB relation
         if isinstance(relation, duckdb.DuckDBPyRelation):
             try:
-                sql_query = relation.sql_query() if hasattr(relation, 'sql_query') else str(relation)
-                self.duckdb.execute(f"CREATE OR REPLACE TABLE {temp_table} AS ({sql_query})")
+                # Get the SQL query from the relation
+                self.duckdb.execute(f"CREATE OR REPLACE TABLE {temp_table} AS SELECT * FROM relation")
                 return self.duckdb.table(temp_table)
             except Exception as e:
-                self.logger.log_warning(f"Failed to use SQL query, falling back to arrow: {e}")
+                self.logger.log_warning(f"Failed to create from relation, falling back: {e}")
+                # Convert to arrow and back
                 arrow_table = relation.arrow()
-                self.duckdb.register(temp_table, arrow_table)
+                self.duckdb.execute(f"CREATE OR REPLACE TABLE {temp_table} AS SELECT * FROM arrow_table")
                 return self.duckdb.table(temp_table)
 
-        # Case 2: pandas DataFrame
+        # Case 2: pandas DataFrame - convert to DuckDB table
         elif isinstance(relation, pd.DataFrame):
-            self.duckdb.register(temp_table, relation)
+            self.duckdb.execute(f"CREATE OR REPLACE TABLE {temp_table} AS SELECT * FROM relation")
             return self.duckdb.table(temp_table)
 
         # Case 3: Dictionary
         elif isinstance(relation, dict):
-            pandas_relation = pd.DataFrame([relation]) if not isinstance(list(relation.values())[0], list) else pd.DataFrame(relation)
-            self.duckdb.register(temp_table, pandas_relation)
+            pandas_df = pd.DataFrame([relation]) if not isinstance(list(relation.values())[0], list) else pd.DataFrame(
+                relation)
+            self.duckdb.execute(f"CREATE OR REPLACE TABLE {temp_table} AS SELECT * FROM pandas_df")
             return self.duckdb.table(temp_table)
 
         # Case 4: List of dictionaries
         elif isinstance(relation, list):
             if len(relation) > 0 and isinstance(relation[0], dict):
-                pandas_relation = pd.DataFrame(relation)
+                pandas_df = pd.DataFrame(relation)
             else:
-                pandas_relation = pd.DataFrame({'data': relation})
-            self.duckdb.register(temp_table, pandas_relation)
+                pandas_df = pd.DataFrame({'data': relation})
+            self.duckdb.execute(f"CREATE OR REPLACE TABLE {temp_table} AS SELECT * FROM pandas_df")
             return self.duckdb.table(temp_table)
 
         # Case 5: Tuple or other iterable
         elif isinstance(relation, tuple):
-            pandas_relation = pd.DataFrame([relation])
-            self.duckdb.register(temp_table, pandas_relation)
+            pandas_df = pd.DataFrame([relation])
+            self.duckdb.execute(f"CREATE OR REPLACE TABLE {temp_table} AS SELECT * FROM pandas_df")
             return self.duckdb.table(temp_table)
 
         # Case 6: None or empty
@@ -289,8 +305,8 @@ class NullChecker:
         # Case 7: Try to convert anything else
         else:
             try:
-                pandas_relation = pd.DataFrame(relation)
-                self.duckdb.register(temp_table, pandas_relation)
+                pandas_df = pd.DataFrame(relation)
+                self.duckdb.execute(f"CREATE OR REPLACE TABLE {temp_table} AS SELECT * FROM pandas_df")
                 return self.duckdb.table(temp_table)
             except Exception as e:
                 self.logger.log_err(f"Failed to convert {type(relation)} to DataFrame: {e}")
@@ -347,7 +363,7 @@ class NullChecker:
     def _handle_json_file_directly(self, file_path: str, temp_table: str):
         """
         Handle JSON file directly with proper date parsing.
-        Reads JSON and converts date columns correctly.
+        Returns DuckDB table reference.
         """
         try:
             import json
@@ -368,20 +384,19 @@ class NullChecker:
                 records = [json_data]
 
             # Convert to pandas DataFrame
-            relation = pd.DataFrame(records)
+            df = pd.DataFrame(records)
 
             # Convert ALL string columns that look like dates to datetime
-            for col in relation.columns:
-                if relation[col].dtype == 'object':
-                    sample = relation[col].dropna()
+            for col in df.columns:
+                if df[col].dtype == 'object':
+                    sample = df[col].dropna()
                     if len(sample) > 0:
                         first_value = str(sample.iloc[0])
                         if self._looks_like_date(first_value):
-                            relation[col] = pd.to_datetime(relation[col], errors='coerce')
+                            df[col] = pd.to_datetime(df[col], errors='coerce')
 
-            # Register as DuckDB table
-            self.duckdb.register(temp_table, relation)
-
+            # ✅ Create DuckDB table directly (not register)
+            self.duckdb.execute(f"CREATE OR REPLACE TABLE {temp_table} AS SELECT * FROM df")
             return self.duckdb.table(temp_table)
 
         except Exception as e:

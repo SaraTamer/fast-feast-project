@@ -1,21 +1,19 @@
 import json
-import duckdb
 from config.config_loader import Config
 from db.connections import SnowflakeConnection
-from db.connections import DuckDBConnection
 from core.logger import AuditLogger
 from .fact_insertion import FactReplayService
 from processing.quality_chekers.orphan_handling.fact_insertion import FactReplayService
 from db.warehouse_manager import WarehouseManager
 class RetryService:
 
-    def __init__(self):
+    def __init__(self, duckdb_conn):
 
         self.logger = AuditLogger()
         self.config = Config()
 
         self.snow = SnowflakeConnection().conn
-        self.duck = DuckDBConnection().conn
+        self.duck = duckdb_conn.conn
         self.replayer = FactReplayService()
         self.warehouse_manager = WarehouseManager(self.snow, "COMPUTE_WH")
 

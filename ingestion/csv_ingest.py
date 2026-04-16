@@ -1,15 +1,11 @@
-import os
-
 from .base_ingester import Ingester
-import duckdb as dd
 import core.logger as logger
-from db.connections import DuckDBConnection
 
 class CSVIngest(Ingester):
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str, duckdb):
         self.file_path = file_path
         self.audit_logger= logger.AuditLogger()
-        self.conn = DuckDBConnection().conn
+        self.conn = duckdb.conn
 
     def ingest(self):
         self.audit_logger.log_msg(f"Ingesting data from {self.file_path}...")
