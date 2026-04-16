@@ -1,5 +1,6 @@
 from time import sleep
 from core.logger import AuditLogger
+from db.connections import DuckDBConnection
 from config.required_cols_loader import RequiredColsLoader
 from config.schema_loader import SchemaLoader
 from config.config_loader import Config
@@ -20,9 +21,9 @@ class OrphanChecker:
         self.writer = ErrorBatchWriter()
         self.register = OrphansRegistrar(duckdb_conn)
 
-    # processing/quality_chekers/orphan_handling/orphan_detector.py
 
     def detect_orphans(self, table_name, fact_df, dims_names, batch_id):
+
         self.duckdb.register("fact_table", fact_df)
         foreign_keys = self.req_cols_schema.get_foreign_keys(table_name)
         primary_key = self.schema.get_primary_key(table_name)
@@ -35,13 +36,14 @@ class OrphanChecker:
         self.duckdb.register("clean_table", clean_relation)
 
         for fk in foreign_keys:
+
             fk_column = fk["column"]
             ref = fk["references"]
 
             if '.' in ref:
                 referenced_table = ref.split('.')[0]
                 if referenced_table in stream_dim:
-                    continue
+                    continue  # Skip this foreign key
             dim_name, dim_column = ref.split(".")
 
             if dim_name not in dims_names:
@@ -58,14 +60,14 @@ class OrphanChecker:
             rows = self.duckdb.execute(query).fetchall()
             if not rows:
                 continue
-
-            self.logger.log_warning(f"{len(rows)} orphans detected in {table_name} referencing {dim_name}")
             
+            self.logger.log_warning(f"{len(rows)} orphans detected in {table_name} referencing {dim_name}")
+
             # Get column names to find fk_column index
-            result = self.duckdb.execute(f"SELECT * FROM fact_table LIMIT 1")
+            result = self.duckdb.execute(f"SELECT * FROM clean_table LIMIT 1")
             column_names = [desc[0] for desc in result.description]
             fk_col_index = column_names.index(fk_column) if fk_column in column_names else 0
-            
+
             for r in rows:
                 fk_value = r[fk_col_index]
                 all_orphans.append((r, fk_column, fk_value, dim_name))
@@ -82,7 +84,8 @@ class OrphanChecker:
 
             # Track orphans for reconciliation
             for r in rows:
-                all_orphans.append((r, fk_column, dim_name))
+                fk_value = r[fk_col_index]
+                all_orphans.append((r, fk_column, fk_value, dim_name))
 
             # Remove orphans from clean_relation
             orphan_ids = [str(r[0]) for r in rows if r and len(r) > 0]
@@ -108,7 +111,7 @@ class OrphanChecker:
 
         # Register orphans for retry
         if all_orphans:
-            self.logger.log_msg(f"Orphan batch sent to {self.config.get_errors_table_name}")
+            self.logger.log_msg(f"Orphan batch sent to {self.config.get_errors_table_name()} with {total_orphans} records for {table_name}")
             self.register.register_batch(table_name, primary_key, all_orphans)
 
             if hasattr(self, 'metrics_tracker') and self.metrics_tracker:

@@ -1,6 +1,6 @@
+from db.connections import DuckDBConnection
 from config.schema_loader import SchemaLoader
 from core.logger import AuditLogger
-
 
 class DimensionCache:
 
@@ -39,9 +39,6 @@ class DimensionCache:
         """Get list of all cached dimension names."""
         return list(self.cached_dimensions)
 
-    def get_join_key(self, table_name: str):
-        """Get the primary key (join key) for a table."""
-        return self.schema_loader.get_primary_key(table_name)
     def clear_cache(self):
         """Clear all cached dimensions from memory and DuckDB."""
         self.logger.log_msg(f"Clearing dimension cache. Current cache: {self.cached_dimensions}")
@@ -57,3 +54,7 @@ class DimensionCache:
         # Clear the set
         self.cached_dimensions.clear()
         self.logger.log_msg("Dimension cache cleared successfully")
+
+    def get_join_key(self, table_name: str):
+        """Get the primary key (join key) for a table."""
+        return self.schema_loader.get_primary_key(table_name)

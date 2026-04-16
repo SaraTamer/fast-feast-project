@@ -122,12 +122,10 @@ tables:
   restaurants:
     required_columns:
       - restaurant_id
-      - restaurant_name
       - region_id
       - category_id
     types:
       restaurant_id: VARCHAR
-      restaurant_name: VARCHAR
       region_id: VARCHAR
       category_id: VARCHAR
     primary_keys:
