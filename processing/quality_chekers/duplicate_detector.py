@@ -61,25 +61,6 @@ class DuplicateChecker:
             'table_checked': None
         }
 
-    def _sanitize_name(self, name: str) -> str:
-        """Sanitize table/column names to be DuckDB-compatible."""
-        if not name:
-            return "temp_table"
-        sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
-        if sanitized and sanitized[0].isdigit():
-            sanitized = f"t_{sanitized}"
-        return sanitized
-
-    def _safe_drop(self, name: str):
-        """Safely drop a table or view if it exists."""
-        try:
-            self.duckdb.execute(f"DROP TABLE IF EXISTS {name}")
-        except Exception:
-            try:
-                self.duckdb.execute(f"DROP VIEW IF EXISTS {name}")
-            except:
-                pass
-
     def _needs_duplicate_check(self, table_name: str) -> bool:
         """Check if table needs duplicate checking (only fact tables)."""
         return table_name in self.FACT_TABLES
@@ -117,7 +98,7 @@ class DuplicateChecker:
         for pk in primary_keys:
             values = distinct_keys[pk].dropna().unique().tolist()
             if values:
-                escaped_values = [str(v).replace("'", "''") for v in values]
+                escaped_values = [str(v).replace("'", "''") for v in values] #This handles values that contain apostrophes
                 values_str = ", ".join([f"'{v}'" for v in escaped_values])
                 where_conditions.append(f'"{pk}" IN ({values_str})')
 
@@ -134,7 +115,7 @@ class DuplicateChecker:
         try:
             self.logger.log_msg(f"Querying Snowflake for existing keys in {table_name}")
 
-            # ✅ Use warehouse manager to ensure warehouse is running
+            # Use warehouse manager to ensure warehouse is running
             with self.warehouse_manager.auto_manage():
                 cursor = self.snowflake.conn.cursor()
                 cursor.execute(snowflake_query)
@@ -283,13 +264,3 @@ class DuplicateChecker:
                 'metrics': self.quality_metrics,
                 'error': str(e)
             }
-
-    def get_quality_report(self) -> Dict:
-        """Return quality metrics summary"""
-        return {
-            'checker_type': 'duplicate_checker',
-            'dwh_type': 'snowflake',
-            'database': self.database,
-            'schema': self.schema,
-            'metrics': self.quality_metrics
-        }

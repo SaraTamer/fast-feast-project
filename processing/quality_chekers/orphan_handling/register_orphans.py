@@ -28,9 +28,9 @@ class OrphansRegistrar:
             try:
                 insert_count = 0
                 # Convert Windows path to forward slashes
-                for row_data in rows:  # row_data is a tuple of (r, fk_column, dim_name)
-                    # Extract the three elements
-                    r, fk_column, dim_name = row_data
+                for row_data in rows:  # row_data is a tuple of (r, fk_column, fk_value, dim_name)
+                    # Extract the four elements
+                    r, fk_column, fk_value, dim_name = row_data
 
                     # Extract event_id from the first column
                     evt_id = r[0] if r and len(r) > 0 else None
@@ -47,6 +47,7 @@ class OrphansRegistrar:
                     payload = json.dumps({
                         'row': serializable_row,
                         'fk_column': fk_column,
+                        'fk_value': str(fk_value) if fk_value is not None else None,
                         'dim_name': dim_name,
                         'table_name': table_name
                     })

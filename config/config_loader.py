@@ -28,3 +28,5 @@ class Config:
         return self.settings['rules']['orphan_check_delay_seconds']
     def get_errors_table_name(self):
         return self.settings['snowflake_tables']['errors_table']
+    def max_retries(self):
+        return self.settings['rules']['max_retries']

@@ -1,7 +1,7 @@
 import re
 import duckdb
 import pandas as pd
-from typing import Dict, List, Any, Optional, Tuple, Union
+from typing import Dict, Any
 from core.logger import AuditLogger
 from config.config_loader import Config
 from config.required_cols_loader import RequiredColsLoader
@@ -130,15 +130,15 @@ class NullChecker:
         # Find records with nulls
         null_conditions = " OR ".join([f'"{col}" IS NULL' for col in non_null_columns])
 
-        # ✅ Return as DuckDB relation (not DataFrame)
+        # Return as DuckDB relation (not DataFrame)
         null_records_relation = self.duckdb.execute(f'SELECT * FROM "{temp_table}" WHERE {null_conditions}').fetchdf()
         clean_records_count = total_records - len(null_records_relation)
 
-        # ✅ Get clean records as DuckDB relation (not DataFrame)
+        # Get clean records as DuckDB relation (not DataFrame)
         clean_records_query = f'SELECT * FROM "{temp_table}" WHERE NOT ({null_conditions})'
         clean_relation_df = self.duckdb.execute(clean_records_query).fetchdf()
 
-        # ✅ Convert back to DuckDB relation
+        # Convert back to DuckDB relation
         clean_relation = self.duckdb.from_df(clean_relation_df)
 
         # Calculate null percentages per column
@@ -245,9 +245,9 @@ class NullChecker:
         self._safe_drop(temp_table)
 
         return {
-            'clean_relation': clean_relation,  # ✅ DuckDB relation
+            'clean_relation': clean_relation,
             'null_records_relation': self.duckdb.from_df(null_records_relation) if len(
-                null_records_relation) > 0 else None,  # ✅ DuckDB relation
+                null_records_relation) > 0 else None,
             'null_summary': null_summary,
             'metrics': self.quality_metrics['failed_records'][table_name]
         }
@@ -414,15 +414,3 @@ class NullChecker:
             r'\d{2}-\d{2}-\d{4}',  # DD-MM-YYYY
         ]
         return any(re.match(pattern, value) for pattern in date_patterns)
-
-    def get_quality_report(self) -> Dict:
-        """Return comprehensive quality report"""
-        return {
-            'checker_type': 'null_checker',
-            'total_checks': self.quality_metrics['total_checks_performed'],
-            'last_check': self.quality_metrics['check_timestamp'].isoformat() if self.quality_metrics[
-                'check_timestamp'] else None,
-            'null_percentages': self.quality_metrics['null_percentages'],
-            'failed_records_summary': self.quality_metrics['failed_records'],
-            'total_quarantined': self.quality_metrics['quarantined_records']
-        }
